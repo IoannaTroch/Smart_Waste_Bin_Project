@@ -1,8 +1,8 @@
 # Smart Waste Bin Project 
 
 ## Team Members
-* **Member 1:** Vasileios Banakos - [ID/Student Number]
-* **Member 2:** Charalampos Papadopoulos - [ID/Student Number]
+* **Member 1:** Vasileios Banakos - up1100950
+* **Member 2:** Charalampos Papadopoulos - up1104662
 * **Member 3:** Ioanna Trochatou - up1101103
 
 ## Project Overview
@@ -15,7 +15,7 @@ This project aims to implement an intelligent waste management system. Using a *
 - **Scalability:** Fully containerized deployment using Docker.
 - **Visualization:** Real-time dashboard for monitoring bin status.
 
-## Current Progress (Milestones)
+## Current Progress 
 - [x] **Milestone 1:** Foundation & Repository Setup.
 - [ ] **Milestone 2:** Sensor Integration (Pending).
 - [ ] **Milestone 3:** Middleware Communication (Pending).
