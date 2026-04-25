@@ -1,16 +1,3 @@
-# Python bytecode
-__pycache__/
-*.py[cod]
-
-# Environments (αν χρησιμοποιήσετε virtual environments)
-.venv/
-env/
 venv/
-
-# IDEs
-.vscode/
-.idea/
-
-# OS files
-.DS_Store
-Thumbs.db
+__pycache__/
+*.jsonl
