@@ -15,7 +15,7 @@ This project implements an intelligent waste management system utilizing **Edge 
 - **Interactive Dashboard:** A Tkinter-based GUI featuring live Matplotlib charts for frequency analysis and inter-event delays.
 - **Network Resilience:** Simulation mode for testing without hardware and auto-reconnect logic for MQTT.
 
----
+
 
 ## Semantic Data Model
 The physical system and its deployment environment have been modeled as structured entities using **JSON-LD**. This creates a semantic "Digital Twin" of the project, allowing it to interoperate with broader Smart Building and IoT ecosystems.
