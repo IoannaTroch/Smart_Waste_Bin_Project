@@ -1,0 +1,37 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "sosa": "http://www.w3.org/ns/sosa/",
+    "bot": "https://w3id.org/bot#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "containsElement": { "@id": "bot:containsElement", "@type": "@id", "@container": "@set" },
+    "isPartOf": { "@id": "schema:containedInPlace", "@type": "@id" },
+    "floorNumber": { "@id": "schema:floorLevel", "@type": "xsd:integer" }
+  },
+  "@id": "urn:env:kypes",
+  "@type": ["bot:Space", "schema:Place"],
+  "name": "KYPES",
+  "description": "IoT Lab at KYPES"
+  "identifier": "KYPES",
+  "floorNumber": 0,
+  "isPartOf": {
+    "@id": "urn:env:HMTY",
+    "@type": ["bot:Building", "schema:Place"],
+    "name": "HMTY",
+    "description": "ECE Building",
+    "address": {
+      "@type": "schema:PostalAddress",
+      "streetAddress": "University, Lab",
+      "addressLocality": "Patras",
+      "addressCountry": "GR"
+    }
+  },
+  "containsElement": [
+    "urn:wastebin:wastedddd",
+    "urn:dev:team-10:pir-01"
+  ],
+  "indoorOutdoor": "indoor",
+  "occupancyType": "mid-traffic",
+  "collectionRoute": "Route1",
+  "area": { "@type": "schema:QuantitativeValue", "value": 60, "unitCode": "MTK" }
+}
