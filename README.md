@@ -20,7 +20,7 @@ This project implements an intelligent waste management system utilizing **Edge 
 ## Semantic Data Model
 The physical system and its deployment environment have been modeled as structured entities using **JSON-LD**. This creates a semantic "Digital Twin" of the project, allowing it to interoperate with broader Smart Building and IoT ecosystems.
 
-The model (`smart_bin_model.jsonld`) utilizes industry-standard Web Ontologies:
+The model utilizes industry-standard Web Ontologies:
 * **Schema.org:** For physical dimensions, capacities, and general product definitions.
 * **SOSA / SSN (W3C):** For describing the HC-SR501 PIR sensor, its mounting, and the specific observations it makes.
 * **BOT (Building Topology Ontology):** To accurately map the bin's physical deployment location (KYPES IoT Lab -> HMTY Building).
