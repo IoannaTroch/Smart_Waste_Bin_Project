@@ -37,7 +37,7 @@ def main():
             for ev in events:
                 # Get human readable time
                 current_time = time.strftime('%H:%M:%S')
-                print(f"[{current_time}] 🚨 MOTION DETECTED! (Timestamp: {ev['t']:.2f})")
+                print(f"[{current_time}]  MOTION DETECTED! (Timestamp: {ev['t']:.2f})")
             
             # Sleep briefly to avoid maxing out the Pi's CPU
             time.sleep(0.05)
