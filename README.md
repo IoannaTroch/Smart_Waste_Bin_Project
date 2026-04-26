@@ -37,7 +37,7 @@ The model utilizes industry-standard Web Ontologies:
 - `pi_edge_node/`: Contains the PIR logic, local logger, and MQTT producer.
 - `laptop_dashboard/`: Contains the MQTT consumer and the graphical user interface.
 - `motion_sensor_lib/`: Shared logic for sampling and interpreting sensor data.
-- `models/`: Contains the modular JSON-LD semantic models (Digital Twin) for the project (`environment.jsonld`, `sensor.jsonld`, and `wastebin.jsonld`).
+- `models/`: Contains the modular JSON-LD semantic models (Digital Twin) for the project (`context.jsonld`, `environment.jsonld`, `sensor.jsonld`, and `wastebin.jsonld`).
 
 ## Project Milestones
 More detailed project milestones/goals and required functionalities will be announced progressively, in alignment with the lab sequence.
