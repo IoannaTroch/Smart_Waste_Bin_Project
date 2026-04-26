@@ -30,9 +30,9 @@ def main():
             # Only print when the state actually changes, so we don't flood the terminal
             if current_state != previous_state:
                 if current_state:
-                    print(f"[{time.strftime('%H:%M:%S')}] 🟢 HIGH (Electricity flowing - Motion!)")
+                    print(f"[{time.strftime('%H:%M:%S')}] Motion!)")
                 else:
-                    print(f"[{time.strftime('%H:%M:%S')}] 🔴 LOW  (Voltage dropped - Clear)")
+                    print(f"[{time.strftime('%H:%M:%S')}] No Motion!")
                 
                 previous_state = current_state
                 
