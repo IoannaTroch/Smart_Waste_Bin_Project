@@ -1,0 +1,46 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "sosa": "http://www.w3.org/ns/sosa/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "pipeline": "https://github.com/IoannaTroch/Smart_Waste_Bin_Project/blob/main/docs/ontology.md#",
+
+    "event_time": {
+      "@id": "sosa:phenomenonTime",
+      "@type": "xsd:dateTime"
+    },
+    "ingest_time": {
+      "@id": "pipeline:ingestTime",
+      "@type": "xsd:dateTime"
+    },
+    "device_id": {
+      "@id": "sosa:madeBySensor",
+      "@type": "@id"
+    },
+    "event_type": "@type",
+    "motion_state": {
+      "@id": "pipeline:motionState",
+      "@type": "xsd:string"
+    },
+    "seq": {
+      "@id": "pipeline:sequenceNumber",
+      "@type": "xsd:integer"
+    },
+    "run_id": {
+      "@id": "pipeline:runId",
+      "@type": "xsd:string"
+    },
+    "pipeline_latency_ms": {
+      "@id": "pipeline:pipelineLatencyMs",
+      "@type": "xsd:float"
+    },
+    "observedIn": {
+      "@id": "sosa:hasFeatureOfInterest",
+      "@type": "@id"
+    },
+    "mountedOn": {
+      "@id": "sosa:hasFeatureOfInterest",
+      "@type": "@id"
+    }
+  }
+}
