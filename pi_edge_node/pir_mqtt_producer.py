@@ -114,7 +114,7 @@ def main():
 
                 if result.rc == 0:
                     temp_str = f"  cpu={payload['cpu_temp_c']}°C" if payload["cpu_temp_c"] else ""
-                    print(f"📡 Published event {seq}  uptime={payload['uptime_s']}s{temp_str}")
+                    print(f" Published event {seq}  uptime={payload['uptime_s']}s{temp_str}")
                 else:
                     print(f"[WARN] Publish failed for event {seq}  rc={result.rc}")
 
