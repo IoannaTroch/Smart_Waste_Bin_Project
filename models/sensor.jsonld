@@ -4,7 +4,7 @@
     "sosa": "http://www.w3.org/ns/sosa/",
     "ssn": "http://www.w3.org/ns/ssn/",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "pipeline": "https://github.com/IoannaTroch/Raspberry_pi_lab/blob/main/docs/ontology.md#",
+    "pipeline": "https://github.com/IoannaTroch/Smart_Waste_Bin_Project/blob/main/docs/ontology.md#",
     "mountedOn": { "@id": "ssn:isPropertyOf", "@type": "@id" },
     "deployedIn": { "@id": "sosa:hasFeatureOfInterest", "@type": "@id" },
     "gpioPin": { "@id": "pipeline:gpioPin", "@type": "xsd:integer" },

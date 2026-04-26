@@ -3,7 +3,7 @@
     "@vocab": "https://schema.org/",
     "sosa": "http://www.w3.org/ns/sosa/",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "pipeline": "https://github.com/IoannaTroch/Raspberry_pi_lab/blob/main/docs/ontology.md#",
+    "pipeline": "https://github.com/IoannaTroch/Smart_Waste_Bin_Project/blob/main/docs/ontology.md#",
     "hasSensor": { "@id": "sosa:hosts", "@type": "@id", "@container": "@set" },
     "locatedIn": { "@id": "schema:containedInPlace", "@type": "@id" },
     "capacityLiters": { "@id": "schema:amount", "@type": "xsd:float" },
