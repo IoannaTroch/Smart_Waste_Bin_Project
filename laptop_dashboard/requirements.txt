@@ -1,2 +1,8 @@
+# Laptop dashboard + analytics dependencies (Milestone 11 + Dashboard)
 paho-mqtt>=2.0.0
-matplotlib>=3.8.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+seaborn>=0.12.0
+
+# tkinter ships with standard CPython. On Debian/Ubuntu install it with:
+#   sudo apt-get install python3-tk

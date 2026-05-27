@@ -1,57 +1,57 @@
-# Smart Wastebin — Custom Ontology Terms
+# Smart Waste Bin — Data Model & Ontology (Milestone 5)
 
-Base namespace: `https://github.com/IoannaTroch/Smart_Waste_Bin_Project/blob/main/docs/ontology.md#`
+This document describes how the Smart Waste Bin system is modelled with **JSON-LD**.
+The goal is to describe the sensors, the bins, and the deployment environment as
+structured entities with explicit, machine-readable relationships, reusing
+established vocabularies instead of inventing everything from scratch.
 
-Prefix used in JSON-LD: `pipeline`
+## Vocabularies reused
 
-## Pipeline Terms
+| Prefix     | Namespace                              | Used for |
+|------------|----------------------------------------|----------|
+| `schema`   | https://schema.org/                    | Names, locations, generic things, events |
+| `sosa`     | http://www.w3.org/ns/sosa/             | Sensors and observations (SOSA/SSN) |
+| `geo`      | http://www.w3.org/2003/01/geo/wgs84_pos# | Latitude / longitude |
+| `smartbin` | urn:smartbin:vocab#                    | Project-specific terms (bins, usage intensity) |
 
-### sequenceNumber
-- **Type:** `xsd:integer`
-- **Description:** Monotonically increasing counter assigned by the producer to each event record within a single pipeline run. Used to detect gaps or reordering in the stream.
+The shared `@context` lives in [`models/context.jsonld`](../models/context.jsonld)
+and is referenced by every other model file, so terms are defined once.
 
-### runId
-- **Type:** `xsd:string`
-- **Description:** Unique identifier for a single execution of the pipeline. All records sharing the same runId were produced in the same run session.
+## Entities
 
-### pipelineLatencyMs
-- **Type:** `xsd:float`
-- **Description:** Time in milliseconds between the moment the producer created the event (event_time) and the moment the consumer ingested it (ingest_time). Measures end-to-end queue transit time.
+### Wastebin (`models/wastebin.jsonld`)
+A physical container being monitored. Key properties: `id`, `name`, `location`,
+`status`, `capacity_liters`, `fill_threshold_pct`. A bin is `deployedIn` an
+Environment and `monitors`-ed by a Sensor.
 
-### ingestTime
-- **Type:** `xsd:dateTime`
-- **Description:** ISO 8601 timestamp recording the moment the pipeline consumer received and processed the event record.
+### Sensor (`models/sensor.jsonld`)
+A device (physical or virtual) producing observations. Key properties: `id`,
+`type`, `model`, `status`, `observedProperty`. A sensor is `mounted_on` a bin.
+The registry includes the physical PIR sensors **and** the two virtual sensors
+from Milestone 9 (rule-based usage intensity, ML busy-period predictor).
 
-### motionState
-- **Type:** `xsd:string`
-- **Allowed values:** `detected`, `cleared`
-- **Description:** The discrete outcome of the PIR observation. `detected` means at least one warm body crossed the detection cone during the observation window. `cleared` means no motion was detected during the cooldown period following a prior detection.
+### Environment (`models/environment.jsonld`)
+The deployment context (the lab room): `id`, `name`, `location`, geo-coordinates,
+and which bins it `contains`.
 
-## Sensor Terms
+### Observation (runtime, on the wire)
+Each motion event published to `smartbin/<bin>/<device>/events` is itself a small
+JSON-LD document (`@type: Event`) carrying `startDate`, `madeBySensor`,
+`hasSimpleResult`, and `location`, so the event stream is self-describing.
 
-### gpioPin
-- **Type:** `xsd:integer`
-- **Description:** BCM-numbered GPIO pin on the Raspberry Pi to which the sensor's signal output line is connected.
+## Relationship graph
 
-### detectionRangeMeters
-- **Type:** `xsd:float`
-- **Description:** Maximum radial distance in metres at which the sensor can reliably detect a moving warm body, as adjusted via the sensitivity potentiometer.
+```
+Environment(env-lab-101)
+   └── contains ──> Wastebin(bin-01) ── monitors ──> Sensor(pir-01)  [HC-SR501]
+                          ▲                                   │
+                          │ mounted_on  ──────────────────────┘
+                          ├── monitored by ──> Sensor(vs-usage-01)  [rule-based]
+                          └── monitored by ──> Sensor(vs-predict-01) [ML]
+```
 
-### detectionAngleDegrees
-- **Type:** `xsd:float`
-- **Description:** Full cone angle in degrees of the sensor's detection field, determined by the Fresnel lens geometry.
-
-### cooldownSeconds
-- **Type:** `xsd:float`
-- **Description:** Minimum wait time in seconds enforced by the pipeline after a detection event before a new detection can be registered. Corresponds to the software debounce period implemented in Lab 02.
-
-### triggerMode
-- **Type:** `xsd:string`
-- **Allowed values:** `H`, `L`
-- **Description:** Hardware jumper setting on the HC-SR501 module. `H` enables repeatable triggering (output stays high while motion persists); `L` disables repeat triggering (single pulse per crossing).
-
-## Wastebin Terms
-
-### fillLevelPercent
-- **Type:** `xsd:float`
-- **Description:** Current fill level of the wastebin expressed as a percentage of total capacity (0.0 = empty, 100.0 = full). Updated by sensor readings in the full project.
+## Why this matters
+Because every entity carries a stable `@id` and typed relationships, the same
+model drives the REST API (`/bins`, `/sensors`), labels Home Assistant entities,
+and lets the analytics layer join events back to the bin and sensor that produced
+them — all without hard-coding identifiers in the application logic.

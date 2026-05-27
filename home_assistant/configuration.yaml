@@ -1,0 +1,94 @@
+# =============================================================================
+# Home Assistant configuration for the Smart Waste Bin (Milestones 9 & 11)
+# -----------------------------------------------------------------------------
+# How discovery works in this project
+# -----------------------------------------------------------------------------
+# Every publisher in this system (the PIR producer, the rule-based virtual
+# sensor and the ML virtual sensor) publishes Home Assistant MQTT *discovery*
+# messages on the `homeassistant/.../config` topics. That means once the MQTT
+# integration is connected to the same broker, all entities appear AUTOMATICALLY
+# — you normally do NOT need to declare them by hand.
+#
+# The `mqtt:` block below is therefore a MANUAL FALLBACK. It lets you bring the
+# dashboard up even if you only have the broker running and want to point HA at
+# it directly (for example during a demo where discovery has not fired yet).
+# Leave it in place; duplicate entities created by discovery use different
+# unique_ids and will not clash.
+# =============================================================================
+
+# Loads default integrations (recorder, history, logbook, energy, etc.).
+default_config:
+
+# -----------------------------------------------------------------------------
+# Point Home Assistant at the project's Mosquitto broker.
+# In the Docker Compose network the broker host is `mosquitto`; if you run HA
+# on your laptop against a local broker, change this to 127.0.0.1.
+# Configure the connection itself via Settings -> Devices & Services -> MQTT,
+# or with the broker options below if you use the YAML MQTT integration.
+# -----------------------------------------------------------------------------
+
+mqtt:
+  # ---- Physical bin / PIR sensor (fallback definitions) ---------------------
+  binary_sensor:
+    - name: "PIR Motion (bin-01)"
+      state_topic: "smartbin/bin-01/pir-01/motion"
+      payload_on: "detected"
+      payload_off: "clear"
+      device_class: motion
+      unique_id: manual_bin01_pir01_motion
+
+    - name: "PIR Online (bin-01)"
+      state_topic: "smartbin/bin-01/pir-01/online"
+      payload_on: "true"
+      payload_off: "false"
+      device_class: connectivity
+      unique_id: manual_bin01_pir01_online
+
+  sensor:
+    - name: "Bin Status (bin-01)"
+      state_topic: "smartbin/bin-01/status"
+      value_template: "{{ value_json.state }}"
+      json_attributes_topic: "smartbin/bin-01/status"
+      icon: mdi:trash-can
+      unique_id: manual_bin01_status
+
+    - name: "Motion Event Count (bin-01)"
+      state_topic: "smartbin/bin-01/pir-01/event_count"
+      unit_of_measurement: "events"
+      icon: mdi:motion-sensor
+      unique_id: manual_bin01_count
+
+    - name: "Last Motion (bin-01)"
+      state_topic: "smartbin/bin-01/pir-01/last_motion"
+      device_class: timestamp
+      icon: mdi:clock-outline
+      unique_id: manual_bin01_last
+
+    # ---- Rule-based virtual sensor (Milestone 9) --------------------------
+    - name: "Usage Intensity (bin-01)"
+      state_topic: "smartbin/bin-01/usage"
+      value_template: "{{ value_json.usage_level }}"
+      json_attributes_topic: "smartbin/bin-01/usage"
+      icon: mdi:gauge
+      unique_id: manual_bin01_usage
+
+    # ---- ML virtual sensor (Milestone 9) ----------------------------------
+    - name: "Busy Prediction (bin-01)"
+      state_topic: "smartbin/bin-01/prediction"
+      value_template: "{{ value_json.prediction }}"
+      json_attributes_topic: "smartbin/bin-01/prediction"
+      icon: mdi:crystal-ball
+      unique_id: manual_bin01_prediction
+
+# -----------------------------------------------------------------------------
+# Lovelace dashboards (mode: yaml lets us version-control dashboard.yaml)
+# -----------------------------------------------------------------------------
+lovelace:
+  mode: storage
+  dashboards:
+    smart-waste-bin:
+      mode: yaml
+      title: Smart Waste Bin
+      icon: mdi:trash-can
+      show_in_sidebar: true
+      filename: dashboard.yaml

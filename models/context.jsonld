@@ -1,46 +1,39 @@
 {
   "@context": {
-    "@vocab": "https://schema.org/",
+    "@version": 1.1,
+    "schema": "https://schema.org/",
     "sosa": "http://www.w3.org/ns/sosa/",
-    "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "pipeline": "https://github.com/IoannaTroch/Smart_Waste_Bin_Project/blob/main/docs/ontology.md#",
+    "ssn": "http://www.w3.org/ns/ssn/",
+    "qudt": "http://qudt.org/schema/qudt/",
+    "geo": "http://www.w3.org/2003/01/geo/wgs84_pos#",
+    "smartbin": "urn:smartbin:vocab#",
 
-    "event_time": {
-      "@id": "sosa:phenomenonTime",
-      "@type": "xsd:dateTime"
-    },
-    "ingest_time": {
-      "@id": "pipeline:ingestTime",
-      "@type": "xsd:dateTime"
-    },
-    "device_id": {
-      "@id": "sosa:madeBySensor",
-      "@type": "@id"
-    },
-    "event_type": "@type",
-    "motion_state": {
-      "@id": "pipeline:motionState",
-      "@type": "xsd:string"
-    },
-    "seq": {
-      "@id": "pipeline:sequenceNumber",
-      "@type": "xsd:integer"
-    },
-    "run_id": {
-      "@id": "pipeline:runId",
-      "@type": "xsd:string"
-    },
-    "pipeline_latency_ms": {
-      "@id": "pipeline:pipelineLatencyMs",
-      "@type": "xsd:float"
-    },
-    "observedIn": {
-      "@id": "sosa:hasFeatureOfInterest",
-      "@type": "@id"
-    },
-    "mountedOn": {
-      "@id": "sosa:hasFeatureOfInterest",
-      "@type": "@id"
-    }
+    "id": "@id",
+    "type": "@type",
+
+    "name": "schema:name",
+    "description": "schema:description",
+    "location": "schema:location",
+    "status": "smartbin:status",
+    "model": "schema:model",
+
+    "Wastebin": "smartbin:Wastebin",
+    "Sensor": "sosa:Sensor",
+    "Environment": "smartbin:Environment",
+    "Observation": "sosa:Observation",
+
+    "madeBySensor": {"@id": "sosa:madeBySensor", "@type": "@id"},
+    "observedProperty": {"@id": "sosa:observedProperty", "@type": "@id"},
+    "hasSimpleResult": "sosa:hasSimpleResult",
+    "resultTime": {"@id": "sosa:resultTime", "@type": "schema:DateTime"},
+
+    "mounted_on": {"@id": "smartbin:mountedOn", "@type": "@id"},
+    "deployedIn": {"@id": "smartbin:deployedIn", "@type": "@id"},
+    "monitors": {"@id": "smartbin:monitors", "@type": "@id"},
+
+    "latitude": "geo:lat",
+    "longitude": "geo:long",
+    "capacity_liters": "smartbin:capacityLiters",
+    "fill_threshold_pct": "smartbin:fillThresholdPct"
   }
 }

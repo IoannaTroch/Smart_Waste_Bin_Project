@@ -1,0 +1,117 @@
+# =============================================================================
+# Smart Waste Bin — Home Assistant status dashboard (Milestone 11)
+# -----------------------------------------------------------------------------
+# Designed with RUSTIC in mind:
+#   Relevant   — only operationally meaningful entities are shown.
+#   Unambiguous— each card has a clear label and unit.
+#   Sober      — calm colours by default; strong colour reserved for problems.
+#   Timely     — live MQTT state plus "last motion" timestamps.
+#   Informative— glance + gauge + history give context, not just raw values.
+#   Consistent — same layout pattern reused per bin.
+#
+# Information hierarchy (top -> bottom):
+#   1. System overview (connectivity + headline KPIs)
+#   2. Conditional alert banner (only visible when usage is HIGH)
+#   3. Live status per bin
+#   4. Derived intelligence (virtual sensors)
+#   5. History / trends
+# =============================================================================
+
+title: Smart Waste Bin
+views:
+  - title: Overview
+    path: overview
+    icon: mdi:trash-can
+    cards:
+
+      # ---- 1. SYSTEM OVERVIEW -------------------------------------------------
+      - type: markdown
+        content: >
+          ## ♻️ Smart Waste Bin — Live Status
+
+          Real-time monitoring of motion activity, derived usage intensity and
+          ML busy/quiet predictions across all bins.
+
+      - type: glance
+        title: System Overview
+        columns: 3
+        state_color: true
+        entities:
+          - entity: binary_sensor.pir_online_bin_01
+            name: Connectivity
+          - entity: sensor.motion_event_count_bin_01
+            name: Events
+          - entity: sensor.usage_intensity_bin_01
+            name: Usage
+
+      # ---- 2. CONDITIONAL ALERT BANNER (only when usage is HIGH) -------------
+      - type: conditional
+        conditions:
+          - entity: sensor.usage_intensity_bin_01
+            state: "high"
+        card:
+          type: markdown
+          content: >
+            ## 🔴 HIGH USAGE ALERT
+
+            **Bin bin-01** is experiencing high motion activity. Consider
+            scheduling a collection.
+
+      # ---- 3. LIVE STATUS (bin-01) -------------------------------------------
+      - type: entities
+        title: Bin bin-01 — Live Status
+        state_color: true
+        entities:
+          - entity: binary_sensor.pir_motion_bin_01
+            name: Motion Now
+            icon: mdi:motion-sensor
+          - entity: sensor.bin_status_bin_01
+            name: Status
+          - entity: sensor.last_motion_bin_01
+            name: Last Motion
+          - entity: sensor.motion_event_count_bin_01
+            name: Events (window)
+          - entity: binary_sensor.pir_online_bin_01
+            name: Sensor Online
+
+      # ---- 4. DERIVED INTELLIGENCE (virtual sensors) -------------------------
+      - type: horizontal-stack
+        cards:
+          - type: gauge
+            name: Usage Intensity
+            entity: sensor.motion_event_count_bin_01
+            unit: "ev"
+            min: 0
+            max: 10
+            needle: true
+            severity:
+              green: 0
+              yellow: 3
+              red: 6
+
+          - type: entity
+            name: Busy Prediction
+            entity: sensor.busy_prediction_bin_01
+            icon: mdi:crystal-ball
+            state_color: true
+
+      # ---- 5. HISTORY / TRENDS -----------------------------------------------
+      - type: history-graph
+        title: Motion Activity (24h)
+        hours_to_show: 24
+        refresh_interval: 30
+        entities:
+          - entity: binary_sensor.pir_motion_bin_01
+            name: Motion
+          - entity: sensor.motion_event_count_bin_01
+            name: Event Count
+
+      - type: statistics-graph
+        title: Event Count Trend
+        chart_type: line
+        period: hour
+        stat_types:
+          - mean
+          - max
+        entities:
+          - sensor.motion_event_count_bin_01

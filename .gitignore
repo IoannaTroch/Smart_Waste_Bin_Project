@@ -1,3 +1,35 @@
-venv/
+# --- Python ---
 __pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.Python
+
+# --- Project data & generated artifacts ---
+data/
 *.jsonl
+charts/
+*.joblib
+*.pkl
+
+# Keep the curated sample events used by the GUI/analyze demo.
+!laptop_dashboard/events_log.json
+
+# --- Mosquitto runtime ---
+mosquitto/data/
+mosquitto/log/
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log

@@ -1,0 +1,100 @@
+# =============================================================================
+# Smart Waste Bin — full system orchestration (Cloud Edition)
+# -----------------------------------------------------------------------------
+# Backend is configured to use the public HiveMQ cloud broker!
+# =============================================================================
+
+services:
+
+  train:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    container_name: smartbin-train
+    command: ["python", "src/train_model.py"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MODELS_DIR: /app/data
+    volumes:
+      - smartbin_data:/app/data
+    restart: "no"
+
+  # The Producer is BACK ON and running in simulation mode!
+  producer:
+    build:
+      context: .
+      dockerfile: pi_edge_node/Dockerfile
+    container_name: smartbin-hardware-node
+    privileged: true  # <--- CRITICAL: This allows Docker to read physical GPIO pins!
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MQTT_BROKER: broker.hivemq.com
+      BIN_ID: bin-02
+      DEVICE_ID: pir-02
+      LOCATION: "Physical Bin"
+    # Notice: No --simulate flag. We are explicitly passing the pin number!
+    command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--bin-id", "bin-02", "--device-id", "pir-02"]
+    restart: unless-stopped
+
+  consumer:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    container_name: smartbin-consumer
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MQTT_BROKER: broker.hivemq.com
+    command: ["python", "src/mqtt_consumer.py", "--broker", "broker.hivemq.com", "--out", "/app/data/motion_events.jsonl"]
+    volumes:
+      - smartbin_data:/app/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    container_name: smartbin-api
+    ports:
+      - "5000:5000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MQTT_BROKER: broker.hivemq.com
+      DATA_DIR: /app/data
+      MODELS_DIR: /app/models  # <--- Πρέπει να δείχνει εδώ
+      API_PORT: "5000"
+    command: ["python", "src/api.py"]
+    volumes:
+      - smartbin_data:/app/data
+      - ./models:/app/models    # <--- ΠΡΟΣΘΕΣΕ ΑΥΤΗ ΤΗ ΓΡΑΜΜΗ
+    restart: unless-stopped
+
+  virtual_sensor_rules:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    container_name: smartbin-vs-rules
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MQTT_BROKER: broker.hivemq.com
+    command: ["python", "src/virtual_sensor_rules.py", "--broker", "broker.hivemq.com", "--ha-discovery"]
+    restart: unless-stopped
+
+  virtual_sensor_ml:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    container_name: smartbin-vs-ml
+    depends_on:
+      train:
+        condition: service_completed_successfully
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MQTT_BROKER: broker.hivemq.com
+      MODEL_PATH: /app/data/busy_predictor.joblib
+    command: ["python", "src/virtual_sensor_ml.py", "--broker", "broker.hivemq.com", "--model-path", "/app/data/busy_predictor.joblib", "--ha-discovery"]
+    volumes:
+      - smartbin_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  smartbin_data:

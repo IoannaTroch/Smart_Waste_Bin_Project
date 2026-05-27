@@ -1,0 +1,14 @@
+# Backend tier dependencies (Milestones 8-9)
+flask>=3.0.0
+flask-restx>=1.3.0
+paho-mqtt>=2.0.0
+
+# ML virtual sensor (Milestone 9)
+scikit-learn>=1.3.0
+pandas>=2.0.0
+numpy>=1.24.0
+joblib>=1.3.0
+
+# Flask-RESTx pulls these, pinned to avoid the known werkzeug/flask-restx
+# import incompatibility on newer Werkzeug releases.
+werkzeug>=3.0.0

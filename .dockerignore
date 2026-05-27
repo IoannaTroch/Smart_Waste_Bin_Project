@@ -1,0 +1,28 @@
+# Keep Docker build contexts small and reproducible.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local data / generated artifacts (created inside containers / volumes).
+data/
+charts/
+*.joblib
+*.log
+
+# Tooling & docs not needed at runtime.
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+README.md
+docs/
+
+# The laptop-only GUI is not containerised.
+laptop_dashboard/
+
+# Node-RED / Home Assistant configs are mounted, not baked into images.
+node_red/
+home_assistant/

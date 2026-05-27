@@ -1,33 +1,31 @@
 {
-  "@context": {
-    "@vocab": "https://schema.org/",
-    "sosa": "http://www.w3.org/ns/sosa/",
-    "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "pipeline": "https://github.com/IoannaTroch/Smart_Waste_Bin_Project/blob/main/docs/ontology.md#",
-    "hasSensor": { "@id": "sosa:hosts", "@type": "@id", "@container": "@set" },
-    "locatedIn": { "@id": "schema:containedInPlace", "@type": "@id" },
-    "capacityLiters": { "@id": "schema:amount", "@type": "xsd:float" },
-    "fillLevelPercent": { "@id": "pipeline:fillLevelPercent", "@type": "xsd:float" },
-    "wasteType": "schema:category",
-    "collectionZone": "schema:areaServed",
-    "status": "schema:status"
-  },
-  "@id": "urn:wastebin:bin-a-101",
-  "@type": "schema:Product",
-  "name": "Wastebin BIN-A-101",
-  "description": "General-purpose indoor wastebin located in Lab Room 101, Building A. Equipped with an HC-SR501 PIR motion sensor for occupancy/usage monitoring as part of the Smart Wastebin IoT project.",
-  "identifier": "BIN-A-101",
-  "capacityLiters": 60.0,
-  "material": "Recycled HDPE plastic",
-  "color": "Grey",
-  "height": { "@type": "schema:QuantitativeValue", "value": 75, "unitCode": "CMT" },
-  "width":  { "@type": "schema:QuantitativeValue", "value": 40, "unitCode": "CMT" },
-  "wasteType": "general",
-  "collectionZone": "Zone-A",
-  "status": "active",
-  "hasSensor": ["urn:dev:team-05:pir-01"],
-  "locatedIn": "urn:env:lab-room-101",
-  "installationDate": "2026-01-15",
-  "lastEmptied": "2026-03-28T10:00:00Z",
-  "fillLevelPercent": 0.0
+  "@context": "context.jsonld",
+  "@type": "schema:Collection",
+  "name": "Smart Waste Bin Registry",
+  "bins": [
+    {
+      "id": "bin-01",
+      "type": "Wastebin",
+      "name": "Kitchen Smart Bin",
+      "location": "Lab Room 101 - Kitchen Corner",
+      "status": "active",
+      "model": "Smart Waste Bin v1",
+      "capacity_liters": 50,
+      "fill_threshold_pct": 80,
+      "deployedIn": "env-lab-101",
+      "monitors": "pir-01"
+    },
+    {
+      "id": "bin-02",
+      "type": "Wastebin",
+      "name": "Hallway Smart Bin",
+      "location": "Lab Room 101 - Entrance",
+      "status": "active",
+      "model": "Smart Waste Bin v1",
+      "capacity_liters": 30,
+      "fill_threshold_pct": 75,
+      "deployedIn": "env-lab-101",
+      "monitors": "pir-02"
+    }
+  ]
 }

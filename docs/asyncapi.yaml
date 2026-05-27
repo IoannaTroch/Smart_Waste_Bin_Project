@@ -1,0 +1,144 @@
+asyncapi: 2.6.0
+info:
+  title: Smart Waste Bin MQTT Interface
+  version: 1.0.0
+  description: >
+    Push-based messaging interface for the Smart Waste Bin (Milestone 8).
+    Documents every MQTT topic the system publishes and subscribes to. This is
+    the AsyncAPI counterpart to the pull-based OpenAPI spec served by src/api.py.
+
+servers:
+  mosquitto:
+    url: localhost:1883
+    protocol: mqtt
+    description: Local Mosquitto broker (see docker-compose.yml / mosquitto/mosquitto.conf)
+
+defaultContentType: application/json
+
+channels:
+  smartbin/{binId}/{deviceId}/motion:
+    parameters:
+      binId:
+        description: Bin identifier, e.g. bin-01
+        schema:
+          type: string
+      deviceId:
+        description: Sensor identifier, e.g. pir-01
+        schema:
+          type: string
+    publish:
+      summary: Simple motion state for Home Assistant and the rule-based virtual sensor.
+      message:
+        $ref: '#/components/messages/MotionState'
+
+  smartbin/{binId}/{deviceId}/events:
+    parameters:
+      binId:
+        schema: {type: string}
+      deviceId:
+        schema: {type: string}
+    publish:
+      summary: Rich JSON-LD motion event consumed by the logger, REST API and analytics.
+      message:
+        $ref: '#/components/messages/MotionEvent'
+
+  smartbin/{binId}/status:
+    parameters:
+      binId:
+        schema: {type: string}
+    publish:
+      summary: Retained bin status (active / idle / emptied).
+      message:
+        $ref: '#/components/messages/BinStatus'
+
+  smartbin/{binId}/usage:
+    parameters:
+      binId:
+        schema: {type: string}
+    publish:
+      summary: Rule-based virtual sensor — usage intensity level.
+      message:
+        $ref: '#/components/messages/UsageIntensity'
+
+  smartbin/{binId}/prediction:
+    parameters:
+      binId:
+        schema: {type: string}
+    publish:
+      summary: ML virtual sensor — predicted busy/quiet for the next hour.
+      message:
+        $ref: '#/components/messages/BusyPrediction'
+
+  homeassistant/{component}/{objectId}/config:
+    parameters:
+      component:
+        description: HA component, e.g. binary_sensor or sensor
+        schema: {type: string}
+      objectId:
+        schema: {type: string}
+    publish:
+      summary: Retained Home Assistant MQTT-discovery configuration.
+      message:
+        $ref: '#/components/messages/HADiscovery'
+
+components:
+  messages:
+    MotionState:
+      name: motionState
+      contentType: text/plain
+      payload:
+        type: string
+        enum: [detected, clear]
+
+    MotionEvent:
+      name: motionEvent
+      payload:
+        type: object
+        properties:
+          "@context": {type: string}
+          "@type": {type: string}
+          name: {type: string, example: MotionDetected}
+          startDate: {type: string, format: date-time}
+          resultTime: {type: string, format: date-time}
+          madeBySensor: {type: string, example: pir-01}
+          hasSimpleResult: {type: string, example: detected}
+          eventNumber: {type: integer}
+          bin_id: {type: string}
+          device_id: {type: string}
+          cpu_temp_c: {type: number}
+
+    BinStatus:
+      name: binStatus
+      payload:
+        type: object
+        properties:
+          state: {type: string, enum: [active, idle, emptied]}
+          location: {type: string}
+          last_motion: {type: string, format: date-time}
+          total_events_today: {type: integer}
+
+    UsageIntensity:
+      name: usageIntensity
+      payload:
+        type: object
+        properties:
+          usage_level: {type: string, enum: [idle, low, medium, high]}
+          event_count: {type: integer}
+          window_minutes: {type: integer}
+          evaluated_at: {type: string, format: date-time}
+
+    BusyPrediction:
+      name: busyPrediction
+      payload:
+        type: object
+        properties:
+          prediction: {type: string, enum: [busy, quiet]}
+          confidence: {type: number}
+          predicted_hour: {type: integer}
+          model: {type: string}
+
+    HADiscovery:
+      name: haDiscovery
+      payload:
+        type: object
+        description: Home Assistant MQTT discovery config (retained).
