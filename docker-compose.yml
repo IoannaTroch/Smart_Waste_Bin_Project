@@ -32,9 +32,19 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       MQTT_BROKER: broker.hivemq.com
-    command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--gas-pin", "23", "--bin-id", "bin-02", "--device-id", "node-02"]
+      MQTT_PORT: "1883"
+    command:
+      [
+        "python",
+        "pi_edge_node/pir_mqtt_producer.py",
+        "--broker", "broker.hivemq.com",
+        "--port", "1883",
+        "--pin", "17",
+        "--gas-pin", "23",
+        "--bin-id", "bin-02",
+        "--device-id", "node-02"
+      ]
     restart: unless-stopped
-
   consumer:
     build:
       context: .
