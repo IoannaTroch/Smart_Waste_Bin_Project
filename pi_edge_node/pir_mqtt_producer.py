@@ -257,9 +257,7 @@ class Producer:
         try:
             while True:
                 now = time.time()
-                
-                # 1. PIR Check
-                raw_pir = sampler.read()
+                raw_pir = not sampler.read()
                 events = interp.update(raw_pir, now)
                 for _ev in events:
                     self._publish_detected()
