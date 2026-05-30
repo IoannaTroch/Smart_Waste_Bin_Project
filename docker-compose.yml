@@ -20,6 +20,7 @@ services:
     restart: "no"
 
   # The Producer is BACK ON and running in simulation mode!
+ # The Producer is BACK ON and running in simulation mode!
   producer:
     build:
       context: .
@@ -32,9 +33,10 @@ services:
       PYTHONUNBUFFERED: "1"
       MQTT_BROKER: broker.hivemq.com
       BIN_ID: bin-02
-      DEVICE_ID: pir-02
+      DEVICE_ID: node-02          # <--- ΔΙΟΡΘΩΘΗΚΕ ΓΙΑ ΝΑ ΤΑΙΡΙΑΖΕΙ
       LOCATION: "Physical Bin"
-    command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--gas-pin", "23", "--bin-id", "bin-02", "--device-id", "node-02", "--min-high", "0.5", "--cooldown", "10.0"]
+    # Αλλάξαμε το --min-high σε 1.0
+    command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--gas-pin", "23", "--bin-id", "bin-02", "--device-id", "node-02", "--min-high", "1.0", "--cooldown", "10.0"]
     restart: unless-stopped
 
   consumer:
