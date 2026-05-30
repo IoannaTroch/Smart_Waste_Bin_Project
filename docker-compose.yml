@@ -34,7 +34,7 @@ services:
       BIN_ID: bin-02
       DEVICE_ID: pir-02
       LOCATION: "Physical Bin"
-    command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--gas-pin", "23", "--bin-id", "bin-01", "--device-id", "node-01", "--min-high", "0.5", "--cooldown", "10.0"]
+    command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--gas-pin", "23", "--bin-id", "bin-02", "--device-id", "node-02", "--min-high", "0.5", "--cooldown", "10.0"]
     restart: unless-stopped
 
   consumer:
