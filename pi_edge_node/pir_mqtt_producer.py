@@ -10,25 +10,28 @@ configs so all entities appear automatically.
 Topic scheme (all under smartbin/<bin>/<device>/...):
 
     smartbin/<bin>/<device>/motion        -> "detected" / "clear"  (HA binary_sensor + rule sensor)
+    smartbin/<bin>/<device>/gas           -> "detected" / "clear"  (HA binary_sensor for MQ-3)
     smartbin/<bin>/<device>/events        -> rich JSON-LD event     (consumer logs these; API + analyze read them)
     smartbin/<bin>/<device>/event_count   -> retained integer       (HA sensor)
     smartbin/<bin>/<device>/last_motion   -> retained ISO timestamp (HA sensor)
     smartbin/<bin>/<device>/online        -> "true"/"false"         (HA connectivity, uses Last Will)
-    smartbin/<bin>/status                 -> retained JSON status    (HA sensor)
-
-Examples:
-    python pir_mqtt_producer.py --bin-id bin-01 --device-id pir-01 --pin 17
-    python pir_mqtt_producer.py --bin-id bin-01 --device-id pir-01 --simulate
-    python pir_mqtt_producer.py --broker 192.168.1.50 --location Kitchen --simulate
+    smartbin/<bin>/status                 -> retained JSON status   (HA sensor)
 """
 
 import argparse
 import json
 import os
 import time
+import random
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
+
+# Import hardware library if available (fallback for simulation on non-Pi devices)
+try:
+    from gpiozero import DigitalInputDevice
+except ImportError:
+    DigitalInputDevice = None
 
 from motion_sensor_lib import PirSampler, PirInterpreter
 
@@ -64,6 +67,7 @@ class Producer:
 
         b, d = self.bin_id, self.device_id
         self.t_motion = f"smartbin/{b}/{d}/motion"
+        self.t_gas = f"smartbin/{b}/{d}/gas"
         self.t_events = f"smartbin/{b}/{d}/events"
         self.t_count = f"smartbin/{b}/{d}/event_count"
         self.t_last = f"smartbin/{b}/{d}/last_motion"
@@ -72,7 +76,14 @@ class Producer:
 
         self.event_count = 0
         self.last_motion = None
+        self.gas_state = False  # False = clear, True = detected
         self.start_time = time.time()
+
+        # Initialize Gas Sensor Hardware
+        if not self.args.simulate and DigitalInputDevice:
+            self.gas_sensor = DigitalInputDevice(self.args.gas_pin)
+        else:
+            self.gas_sensor = None
 
         self.client = make_client(f"producer-{b}-{d}")
         self.client.will_set(self.t_online, "false", qos=1, retain=True)
@@ -85,6 +96,8 @@ class Producer:
             print(f"[mqtt] Connected to {self.args.broker}:{self.args.port}")
             client.publish(self.t_online, "true", qos=1, retain=True)
             self._publish_discovery()
+            # Publish initial gas state
+            client.publish(self.t_gas, "clear", qos=1, retain=True)
         else:
             print(f"[mqtt] Connection failed rc={rc}")
 
@@ -100,9 +113,9 @@ class Producer:
 
         pir_device = {
             "identifiers": [self.device_id],
-            "name": f"PIR Sensor {self.device_id}",
-            "model": "HC-SR501",
-            "manufacturer": "Generic",
+            "name": f"Sensor Array {self.device_id}",
+            "model": "Edge Node v1 (PIR + MQ-3)",
+            "manufacturer": "ECE Course Team",
         }
         bin_device = {
             "identifiers": [self.bin_id],
@@ -111,6 +124,7 @@ class Producer:
             "manufacturer": "ECE Course Team",
         }
 
+        # 1. PIR Motion
         send("binary_sensor", f"{self.device_id}_motion", {
             "name": "PIR Motion",
             "state_topic": self.t_motion,
@@ -120,6 +134,19 @@ class Producer:
             "unique_id": f"{self.device_id}_motion",
             "device": pir_device,
         })
+        
+        # 2. Gas Sensor (MQ-3)
+        send("binary_sensor", f"{self.device_id}_gas", {
+            "name": "Ethanol / Gas Alert",
+            "state_topic": self.t_gas,
+            "payload_on": "detected",
+            "payload_off": "clear",
+            "device_class": "gas",
+            "unique_id": f"{self.device_id}_gas",
+            "device": pir_device,
+        })
+
+        # 3. Bin Status (JSON)
         send("sensor", f"{self.bin_id}_status", {
             "name": "Wastebin Status",
             "state_topic": self.t_status,
@@ -129,6 +156,8 @@ class Producer:
             "icon": "mdi:trash-can",
             "device": bin_device,
         })
+        
+        # 4. Motion Count
         send("sensor", f"{self.bin_id}_motion_count", {
             "name": "Motion Event Count",
             "state_topic": self.t_count,
@@ -137,6 +166,8 @@ class Producer:
             "unique_id": f"{self.bin_id}_motion_count",
             "device": bin_device,
         })
+        
+        # 5. Last Motion Timestamp
         send("sensor", f"{self.bin_id}_last_motion", {
             "name": "Last Motion Time",
             "state_topic": self.t_last,
@@ -145,8 +176,10 @@ class Producer:
             "icon": "mdi:clock-outline",
             "device": bin_device,
         })
+        
+        # 6. Connectivity
         send("binary_sensor", f"{self.device_id}_online", {
-            "name": "PIR Sensor Online",
+            "name": "Edge Node Online",
             "state_topic": self.t_online,
             "payload_on": "true",
             "payload_off": "false",
@@ -154,7 +187,7 @@ class Producer:
             "unique_id": f"{self.device_id}_online",
             "device": pir_device,
         })
-        print("[discovery] 5 Home Assistant entities registered.")
+        print("[discovery] 6 Home Assistant entities registered (Included Gas Sensor).")
 
     # ── Publishing ────────────────────────────────────────────────────────────
     def _publish_detected(self):
@@ -162,8 +195,7 @@ class Producer:
         now = utc_now_iso()
         self.last_motion = now
 
-        # Rich JSON-LD event for the consumer / API / analytics.
-        # Includes both schema.org fields (analyze.py) and SOSA-ish fields (api.py).
+        # Rich JSON-LD event
         event = {
             "@context": "https://schema.org/",
             "@type": "Event",
@@ -179,6 +211,7 @@ class Producer:
             "device_id": self.device_id,
             "uptime_s": int(time.time() - self.start_time),
             "cpu_temp_c": get_cpu_temp(),
+            "gas_alert": "detected" if self.gas_state else "clear"
         }
         self.client.publish(self.t_events, json.dumps(event), qos=1)
 
@@ -186,26 +219,27 @@ class Producer:
         self.client.publish(self.t_motion, "detected", qos=1)
         self.client.publish(self.t_count, str(self.event_count), qos=1, retain=True)
         self.client.publish(self.t_last, now, qos=1, retain=True)
-        self.client.publish(self.t_status, json.dumps({
-            "state": "active",
-            "location": self.location or "unknown",
-            "last_motion": now,
-            "total_events_today": self.event_count,
-        }), qos=1, retain=True)
+        
+        self._update_bin_status("active")
 
         temp = event["cpu_temp_c"]
         temp_str = f"  cpu={temp}C" if temp is not None else ""
-        print(f"[motion] DETECTED  count={self.event_count}{temp_str}  {now}")
+        gas_str = "[GAS ALERT]" if self.gas_state else ""
+        print(f"[motion] DETECTED  count={self.event_count}{temp_str}  {now} {gas_str}")
 
     def _publish_cleared(self):
         self.client.publish(self.t_motion, "clear", qos=1)
+        self._update_bin_status("idle")
+        print("[motion] cleared")
+
+    def _update_bin_status(self, motion_state):
         self.client.publish(self.t_status, json.dumps({
-            "state": "idle",
+            "state": motion_state,
             "location": self.location or "unknown",
             "last_motion": self.last_motion or "never",
             "total_events_today": self.event_count,
+            "gas_warning": self.gas_state
         }), qos=1, retain=True)
-        print("[motion] cleared")
 
     # ── Main loop ─────────────────────────────────────────────────────────────
     def run(self):
@@ -214,26 +248,43 @@ class Producer:
                                 min_high_s=self.args.min_high)
 
         print(f"[mqtt] Connecting to {self.args.broker}:{self.args.port} ...")
-        # connect_async + reconnect loop so the producer survives a late broker.
         self.client.connect_async(self.args.broker, self.args.port, keepalive=60)
         self.client.loop_start()
 
-        print(f"[producer] bin={self.bin_id} device={self.device_id} "
-              f"topic={self.t_motion}  (simulate={sampler.simulate})")
+        print(f"[producer] bin={self.bin_id} device={self.device_id}  (simulate={sampler.simulate})")
 
         was_detected = False
         try:
             while True:
                 now = time.time()
-                raw = sampler.read()
-                events = interp.update(raw, now)
+                
+                # 1. PIR Check
+                raw_pir = sampler.read()
+                events = interp.update(raw_pir, now)
                 for _ev in events:
                     self._publish_detected()
                     was_detected = True
-                if was_detected and not raw:
+                if was_detected and not raw_pir:
                     self._publish_cleared()
                     was_detected = False
+                
+                # 2. Gas Sensor Check
+                # Note: MQ sensors typically output LOW (0) when gas is present, HIGH (1) when clean.
+                # We invert it here so True = Gas Detected.
+                if self.args.simulate or not self.gas_sensor:
+                    current_gas = (random.random() < 0.05)  # 5% chance of random gas spike in simulation
+                else:
+                    current_gas = not bool(self.gas_sensor.value) 
+
+                if current_gas != self.gas_state:
+                    self.gas_state = current_gas
+                    gas_str = "detected" if current_gas else "clear"
+                    self.client.publish(self.t_gas, gas_str, qos=1, retain=True)
+                    self._update_bin_status("active" if was_detected else "idle")
+                    print(f"[gas] STATUS CHANGED -> {gas_str.upper()}")
+
                 time.sleep(self.args.sample_interval)
+
         except KeyboardInterrupt:
             print("\n[producer] Stopping...")
         finally:
@@ -245,13 +296,14 @@ class Producer:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Smart Waste Bin PIR MQTT producer")
+    p = argparse.ArgumentParser(description="Smart Waste Bin Edge Producer (PIR + MQ-3)")
     p.add_argument("--bin-id", default=os.getenv("BIN_ID", "bin-01"))
     p.add_argument("--device-id", default=os.getenv("DEVICE_ID", "pir-01"))
     p.add_argument("--location", default=os.getenv("LOCATION", "Lab Room 101"))
     p.add_argument("--broker", default=os.getenv("MQTT_BROKER", "localhost"))
     p.add_argument("--port", type=int, default=int(os.getenv("MQTT_PORT", "1883")))
-    p.add_argument("--pin", type=int, default=17, help="GPIO pin (BCM)")
+    p.add_argument("--pin", type=int, default=17, help="GPIO pin for PIR Sensor (BCM)")
+    p.add_argument("--gas-pin", type=int, default=27, help="GPIO pin for MQ-3 Gas Sensor (BCM)")
     p.add_argument("--sample-interval", type=float, default=0.1)
     p.add_argument("--cooldown", type=float, default=5.0)
     p.add_argument("--min-high", type=float, default=0.2)
