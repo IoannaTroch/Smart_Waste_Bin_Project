@@ -20,7 +20,7 @@ services:
     restart: "no"
 
   # The Producer is BACK ON and running in simulation mode!
- producer:
+  producer:
     build:
       context: .
       dockerfile: pi_edge_node/Dockerfile
@@ -61,12 +61,12 @@ services:
       PYTHONUNBUFFERED: "1"
       MQTT_BROKER: broker.hivemq.com
       DATA_DIR: /app/data
-      MODELS_DIR: /app/models  # <--- Πρέπει να δείχνει εδώ
+      MODELS_DIR: /app/models
       API_PORT: "5000"
     command: ["python", "src/api.py"]
     volumes:
       - smartbin_data:/app/data
-      - ./models:/app/models    # <--- ΠΡΟΣΘΕΣΕ ΑΥΤΗ ΤΗ ΓΡΑΜΜΗ
+      - ./models:/app/models
     restart: unless-stopped
 
   virtual_sensor_rules:
