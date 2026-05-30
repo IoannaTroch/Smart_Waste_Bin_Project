@@ -20,19 +20,20 @@ services:
     restart: "no"
 
   # The Producer is BACK ON and running in simulation mode!
-  producer:
+ producer:
     build:
       context: .
       dockerfile: pi_edge_node/Dockerfile
     container_name: smartbin-hardware-node
-    privileged: true  # <--- CRITICAL: This allows Docker to read physical GPIO pins!
+    privileged: true              # <--- ΑΠΑΡΑΙΤΗΤΟ: Δίνει δικαιώματα διαχειριστή στο hardware
+    volumes:                      # <--- ΠΡΟΣΘΕΣΕ ΑΥΤΟ ΤΟ BLOCK
+      - /dev:/dev                 # <--- Περνάει όλα τα pins και τα τσιπ μέσα στο Docker
     environment:
       PYTHONUNBUFFERED: "1"
       MQTT_BROKER: broker.hivemq.com
       BIN_ID: bin-02
       DEVICE_ID: pir-02
       LOCATION: "Physical Bin"
-    # Notice: No --simulate flag. We are explicitly passing the pin number!
     command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--bin-id", "bin-02", "--device-id", "pir-02"]
     restart: unless-stopped
 
