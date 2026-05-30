@@ -1,7 +1,7 @@
 # Raspberry Pi edge-node dependencies (Milestones 2-7)
 paho-mqtt>=2.0.0
 
-# GPIO access on the Raspberry Pi. These are no-ops / unavailable on a laptop,
-# where the code automatically falls back to simulation mode (--simulate).
-gpiozero>=2.0 ; platform_machine == "armv7l" or platform_machine == "aarch64"
-lgpio>=0.2 ; platform_machine == "armv7l" or platform_machine == "aarch64"
+# GPIO access on the Raspberry Pi. 
+gpiozero>=2.0 
+lgpio>=0.2 
+rpi-lgpio
