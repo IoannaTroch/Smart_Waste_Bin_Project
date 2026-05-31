@@ -63,7 +63,14 @@ def safe_load_list(filepath, key):
         return []
 
 
-def load_events(filepath, limit=None, sensor_id=None):
+def load_events(filepath, limit=None, bin_id=None):
+    """Read the JSONL event log (newest first).
+
+    Events are filtered by their top-level ``bin_id`` field — the same field the
+    edge-node producer stamps on every published event. (Earlier versions tried
+    to match ``madeBySensor``, which the producer does not emit at the top level,
+    so the endpoint always came back empty.)
+    """
     events = []
     if not os.path.exists(filepath):
         return events
@@ -76,7 +83,7 @@ def load_events(filepath, limit=None, sensor_id=None):
                 record = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if sensor_id is not None and record.get("madeBySensor") != sensor_id:
+            if bin_id is not None and record.get("bin_id") != bin_id:
                 continue
             events.append(record)
     events.reverse()  # newest first
@@ -95,17 +102,6 @@ def find_bin(bin_id):
 
 def find_sensor(sensor_id):
     return next((s for s in sensors_registry if s.get("id") == sensor_id), None)
-
-
-def get_sensor_for_bin(bin_id):
-    for s in sensors_registry:
-        if s.get("mounted_on") == bin_id and str(s.get("model", "")).startswith("HC-SR501"):
-            return s.get("id")
-    # fall back to any sensor mounted on the bin
-    for s in sensors_registry:
-        if s.get("mounted_on") == bin_id:
-            return s.get("id")
-    return None
 
 
 def now_iso():
@@ -147,11 +143,16 @@ sensor_model = api.model("Sensor", {
     "status": fields.String,
 })
 event_model = api.model("Event", {
+    "name": fields.String,
     "startDate": fields.String(description="Event time (ISO)"),
     "resultTime": fields.String,
     "madeBySensor": fields.String,
     "hasSimpleResult": fields.String,
     "eventNumber": fields.Integer,
+    "bin_id": fields.String,
+    "device_id": fields.String,
+    "gas_alert": fields.String,
+    "cpu_temp_c": fields.Float,
     "_topic": fields.String,
     "_received_at": fields.String,
 })
@@ -245,11 +246,10 @@ class BinEvents(Resource):
     @bins_ns.marshal_list_with(event_model)
     def get(self, bin_id):
         """Get motion events for a bin (newest first)."""
+        if not find_bin(bin_id):
+            api.abort(404, f"Bin {bin_id} not found")
         args = events_parser.parse_args()
-        sensor_id = get_sensor_for_bin(bin_id)
-        if sensor_id is None:
-            api.abort(404, f"No sensor found for bin {bin_id}")
-        return load_events(EVENTS_FILE, limit=args.get("limit"), sensor_id=sensor_id)
+        return load_events(EVENTS_FILE, limit=args.get("limit"), bin_id=bin_id)
 
 
 @bins_ns.route("/<string:bin_id>/emptied")
