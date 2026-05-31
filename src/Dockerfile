@@ -1,38 +1,27 @@
 # =============================================================================
-# Backend tier image (Milestones 4, 8, 9)
+# Raspberry Pi edge-node image (Milestones 4, 6, 7)
 # -----------------------------------------------------------------------------
-# One image, several roles. The same image runs the REST API, the MQTT
-# consumer, the rule-based virtual sensor and the ML virtual sensor — the
-# command is chosen per-service in docker-compose.yml.
+# This container reads the real HC-SR501 PIR and MQ-3 gas sensor over GPIO, so
+# it must run ON the Raspberry Pi and be given access to the hardware. In
+# docker-compose.yml that is done with `privileged: true` and a `/dev:/dev`
+# volume mount. Build the image on the Pi (or with buildx for arm64).
 # =============================================================================
 FROM python:3.12-slim
 
-# Avoid .pyc files and force unbuffered stdout so logs stream to `docker logs`.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install Python dependencies first for better layer caching.
-COPY src/requirements.txt /app/requirements.txt
+COPY pi_edge_node/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy the backend source and the shared data model.
-COPY src/ /app/src/
-COPY models/ /app/models/
+COPY pi_edge_node/ /app/pi_edge_node/
 
-# Project-root-aware paths used by api.py (see MODELS_DIR / DATA_DIR env).
-ENV PROJECT_ROOT=/app \
-    MODELS_DIR=/app/models \
-    DATA_DIR=/app/data \
-    MQTT_BROKER=mosquitto \
-    API_PORT=5000
+ENV MQTT_BROKER=broker.hivemq.com \
+    BIN_ID=bin-01 \
+    DEVICE_ID=pir-01 \
+    LOCATION="Lab Room 101"
 
-# Shared data volume (motion_events.jsonl, trained model) lives here.
-RUN mkdir -p /app/data
-VOLUME ["/app/data"]
-
-EXPOSE 5000
-
-# Default role: REST API. Overridden per service in docker-compose.yml.
-CMD ["python", "src/api.py"]
+# Default: publish real motion/gas events to the broker.
+CMD ["python", "pi_edge_node/pir_mqtt_producer.py"]
