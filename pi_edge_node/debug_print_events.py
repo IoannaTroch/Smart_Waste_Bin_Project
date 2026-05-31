@@ -4,10 +4,10 @@ debug_print_events.py  —  prove the sensing library works (Milestone 2/3).
 
 Wires PirSampler -> PirInterpreter and prints every *clean* motion event
 (after debounce + cooldown). This is the human-readable sanity check that the
-modular library behaves before we start shipping events over MQTT.
+modular library behaves before we start shipping events over MQTT. Runs on a
+Raspberry Pi with the PIR wired to GPIO.
 
     python debug_print_events.py --pin 17
-    python debug_print_events.py --simulate          # laptop-friendly
     python debug_print_events.py --pin 17 --cooldown 5 --min-high 0.2
 """
 
@@ -25,13 +25,12 @@ def main() -> None:
                    help="Seconds to wait after an event before allowing another")
     p.add_argument("--min-high", type=float, default=0.2,
                    help="Seconds the signal must stay HIGH to count as motion")
-    p.add_argument("--simulate", action="store_true", help="Run without real GPIO")
     args = p.parse_args()
 
     print(f"Initializing PIR on pin {args.pin}  "
           f"(cooldown={args.cooldown}s, min-high={args.min_high}s)")
 
-    sampler = PirSampler(args.pin, simulate=args.simulate)
+    sampler = PirSampler(args.pin)
     interp = PirInterpreter(cooldown_s=args.cooldown, min_high_s=args.min_high)
 
     print("\n--- Monitoring for motion (Ctrl-C to exit) ---")
