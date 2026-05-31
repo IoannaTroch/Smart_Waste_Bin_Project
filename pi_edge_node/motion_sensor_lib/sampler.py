@@ -43,8 +43,9 @@ class PirSampler:
             except Exception as exc:  # pragma: no cover - hardware specific
                 print(f"[PirSampler] gpiozero unavailable ({exc.__class__.__name__}); "
                       f"falling back to SIMULATION mode.")
-                raise exc            # <--- ΠΡΟΣΘΕΣΕ ΑΥΤΟ: Αναγκάζει το πρόγραμμα να δείξει το λάθος!
-                # self.simulate = True # <--- ΒΑΛΕ # ΕΔΩ για να σταματήσει η προσομοίωση
+                # Transparently degrade to the software simulator instead of
+                # crashing, so the pipeline still runs on a laptop / in CI.
+                self.simulate = True
 
     def read(self) -> bool:
         """Return the current sensor state.
