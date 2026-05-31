@@ -2,7 +2,7 @@
 
 An IoT pipeline that turns a Raspberry Pi + HC‑SR501 PIR motion sensor + **MQ-3 Gas Sensor** into a **Smart Waste Bin**: it senses usage and gas levels, ships events over MQTT, persists and serves them through a REST API, derives insight with rule‑based and ML **virtual sensors**, and visualizes everything in both a **Home Assistant** dashboard and a custom **live desktop dashboard**. The whole backend comes up with a single `docker compose up`.
 
-> **Course:** IoT / Middleware — Semester project
+> **Course:** Advanced programming technics
 > **Group 10:** ΜΠΑΝΑΚΟΣ ΒΑΣΙΛΕΙΟΣ · ΠΑΠΑΔΟΠΟΥΛΟΣ ΧΑΡΑΛΑΜΠΟΣ · ΤΡΟΧΑΤΟΥ ΙΩΑΝΝΑ
 
 ***
