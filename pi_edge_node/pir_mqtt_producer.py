@@ -2,7 +2,8 @@
 """
 pir_mqtt_producer.py — Smart Waste Bin edge-node MQTT producer (Milestones 6/7).
 
-Reads an HC-SR501 PIR motion sensor (and an MQ-3 gas sensor) and publishes:
+Reads an HC-SR501 PIR motion sensor (and an MQ-3 gas sensor) over GPIO and
+publishes:
 
     smartbin/<bin>/<device>/motion        detected | clear      (retained)
     smartbin/<bin>/<device>/gas           detected | clear      (retained)
@@ -15,19 +16,14 @@ It also publishes Home Assistant MQTT-discovery messages so the motion, gas,
 online, event-count and last-motion entities appear automatically (--ha-discovery,
 on by default).
 
-On a Raspberry Pi the sensors are read over GPIO. On any other machine — or with
---simulate / PIR_SIMULATE=1 — the sensors fall back to a deterministic software
-simulation (provided by motion_sensor_lib), so the whole pipeline can be demoed
-without hardware. This is what the Docker Compose stack uses by default.
+This is a hardware component: it must run on a Raspberry Pi with the sensors
+wired to GPIO (PIR on BCM 17, MQ-3 on BCM 23 by default).
 
-Run (Raspberry Pi, real hardware):
+Run:
     python pir_mqtt_producer.py --broker broker.hivemq.com \
-        --pin 17 --gas-pin 23 --bin-id bin-01 --device-id pir-01 --no-simulate
+        --pin 17 --gas-pin 23 --bin-id bin-01 --device-id pir-01
 
-Run (laptop / container, simulated):
-    python pir_mqtt_producer.py --broker broker.hivemq.com --simulate
-
-Env: MQTT_BROKER, MQTT_PORT, BIN_ID, DEVICE_ID, LOCATION, PIR_SIMULATE
+Env: MQTT_BROKER, MQTT_PORT, BIN_ID, DEVICE_ID, LOCATION
 """
 
 import argparse
@@ -39,6 +35,7 @@ import time
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
+from gpiozero import DigitalInputDevice
 
 # Make the sibling motion_sensor_lib importable regardless of the working dir
 # (e.g. when launched as `python pi_edge_node/pir_mqtt_producer.py` from /app).
@@ -66,33 +63,18 @@ def make_client(client_id: str) -> mqtt.Client:
 
 
 class GasSampler:
-    """MQ-3 gas sensor reader with the same simulate-on-no-hardware contract as
-    PirSampler. read() returns True when gas is detected.
+    """MQ-3 gas sensor reader. read() returns True when gas is detected.
 
     Many MQ-3 breakout boards pull their digital output LOW when gas is present,
     so --gas-active-low (the default) treats a LOW pin as 'detected'.
     """
 
-    def __init__(self, pin: int, simulate: bool = False, active_low: bool = True):
+    def __init__(self, pin: int, active_low: bool = True):
         self.pin = pin
         self.active_low = active_low
-        self.simulate = simulate or os.getenv("PIR_SIMULATE", "0") == "1"
-        self._dev = None
-        self._t0 = time.time()
-        if not self.simulate:
-            try:
-                from gpiozero import DigitalInputDevice
-                self._dev = DigitalInputDevice(pin)
-            except Exception as exc:
-                print(f"[GasSampler] gpiozero unavailable ({exc.__class__.__name__}); "
-                      f"falling back to SIMULATION mode.")
-                self.simulate = True
+        self._dev = DigitalInputDevice(pin)
 
     def read(self) -> bool:
-        if self.simulate:
-            # A brief, rare alert: ~2 s "detected" roughly once a minute.
-            phase = (time.time() - self._t0) % 60.0
-            return 30.0 <= phase <= 32.0
         level_high = bool(self._dev.value)
         return (not level_high) if self.active_low else level_high
 
@@ -124,10 +106,9 @@ class Producer:
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
 
-        self.sampler = PirSampler(args.pin, simulate=args.simulate)
+        self.sampler = PirSampler(args.pin)
         self.interp = PirInterpreter(cooldown_s=args.cooldown, min_high_s=args.min_high)
-        self.gas = GasSampler(args.gas_pin, simulate=args.simulate,
-                              active_low=args.gas_active_low)
+        self.gas = GasSampler(args.gas_pin, active_low=args.gas_active_low)
 
     # ── MQTT callbacks ────────────────────────────────────────────────────────
     def _on_connect(self, client, userdata, flags, rc, properties=None):
@@ -245,9 +226,8 @@ class Producer:
             raise RuntimeError(
                 f"MQTT connection timeout to {self.args.broker}:{self.args.port}")
 
-        mode = "SIMULATION" if self.args.simulate else "HARDWARE"
-        print(f"[pir] Sampling GPIO{self.args.pin} ({mode})")
-        print(f"[gas] Monitoring GPIO{self.args.gas_pin} ({mode})")
+        print(f"[pir] Sampling GPIO{self.args.pin}")
+        print(f"[gas] Monitoring GPIO{self.args.gas_pin}")
 
         prev_raw = False
         try:
@@ -276,10 +256,6 @@ class Producer:
             self.client.loop_stop()
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    return os.getenv(name, "1" if default else "0") == "1"
-
-
 def main():
     p = argparse.ArgumentParser(description="Smart Waste Bin PIR/Gas MQTT producer")
     p.add_argument("--bin-id", default=os.getenv("BIN_ID", "bin-01"))
@@ -294,9 +270,6 @@ def main():
                    help="Seconds to suppress repeat detections after one fires")
     p.add_argument("--min-high", type=float, default=0.2,
                    help="Seconds the signal must stay HIGH to count as motion")
-    p.add_argument("--simulate", action=argparse.BooleanOptionalAction,
-                   default=_env_bool("PIR_SIMULATE", False),
-                   help="Use the software simulator instead of real GPIO")
     p.add_argument("--gas-active-low", action=argparse.BooleanOptionalAction,
                    default=True, help="Treat a LOW gas pin as 'detected'")
     p.add_argument("--ha-discovery", action=argparse.BooleanOptionalAction,
