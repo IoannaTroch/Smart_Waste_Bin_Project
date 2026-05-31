@@ -101,11 +101,12 @@ Smart_Waste_Bin_Project/
 > **Requirements:** Docker + Docker Compose running on a Raspberry Pi.
 
 ```bash
-cd Smart_Waste_Bin_Project
+cd Smart_Waste_Bin_Project/Smart_Waste_Bin_Project
 docker compose up -d --build
+docker compose start homeassistant
 ```
 
-That single command:
+These commands:
 
 - Connects to the public `broker.hivemq.com`
 - Starts the Producer to read Hardware Pins (PIR on 17, MQ-3 on 23) natively via `/dev`
@@ -115,14 +116,14 @@ That single command:
 
 ### Managing Home Assistant & Containers
 
-If you want to stop/start specific containers (like Home Assistant) without bringing down the whole stack:
+If you want to stop/start specific containers without bringing down the whole stack:
 
 ```bash
 docker compose stop homeassistant
 docker compose start homeassistant
 ```
 
-Stop the whole stack: `docker compose down` (add `-v` to wipe the volumes).
+Stop the whole stack: `docker compose down` (add maybe `-v` to wipe the volumes).
 
 ***
 
