@@ -146,7 +146,8 @@ docker compose ps                   # service status
 docker compose down                 # stop everything (add -v to wipe the volume)
 ```
 
-Home Assistant runs separately — see §7.
+Home Assistant also starts as part of the stack (see §7) — on first run, do the
+one-time MQTT integration setup in its UI.
 
 ---
 
@@ -201,14 +202,22 @@ Interactive Swagger UI: `http://localhost:5000/`
 
 ## 7. Home Assistant Setup
 
-The system uses **MQTT auto‑discovery** — the edge-node producer and both
-virtual sensors announce their entities on `homeassistant/.../config`, so they
-appear automatically once Home Assistant is connected to the same broker.
+Home Assistant runs as the `homeassistant` service in `docker-compose.yml`, so
+`docker compose up` starts it and `docker compose down` stops it. It mounts
+`home_assistant/` as its `/config`, so it uses your `configuration.yaml` and
+`dashboard.yaml` directly. With host networking the UI is at
+`http://<host>:8123` (your dashboard: `http://<host>:8123/smart-waste-bin/overview`).
 
-1. Install the MQTT integration: **Settings → Devices & Services → Add Integration → MQTT**.
-2. Point it at `broker.hivemq.com` (port 1883, no auth).
-3. Start the backend (`docker compose up -d`). Within seconds a **"Smart Bin bin-01"**
-   device appears with entities:
+On first start, do the one-time MQTT setup:
+
+1. Open the HA UI and create an account.
+2. **Settings → Devices & Services → Add Integration → MQTT**, pointing it at
+   `broker.hivemq.com` (port 1883, no auth). The broker connection itself is set
+   up here, in the UI — it can't be pre-seeded from YAML.
+
+After that, **MQTT auto‑discovery** takes over: the edge-node producer and both
+virtual sensors announce their entities on `homeassistant/.../config`, so a
+**"Smart Bin bin-01"** device appears automatically with:
    - `binary_sensor`: PIR Motion, Gas Alert, Edge Node Online
    - `sensor`: Motion Event Count, Last Motion
    - `sensor`: Usage Intensity (rule sensor) and Busy Prediction (ML sensor)
