@@ -1,5 +1,5 @@
 # =============================================================================
-# Smart Waste Bin — full backend orchestration (Cloud Edition)
+# Smart Waste Bin — full system orchestration (Cloud Edition)
 # -----------------------------------------------------------------------------
 # The backend talks to the public HiveMQ broker (broker.hivemq.com:1883), so no
 # local broker is required.
@@ -8,8 +8,10 @@
 # this stack is meant to run ON the Raspberry Pi: the producer service is given
 # hardware access via `privileged: true` and the `/dev:/dev` mount.
 #
-# Home Assistant is NOT part of this stack — it auto-discovers the bin once you
-# point its MQTT integration at the same broker (see README §7).
+# Home Assistant is included as a service, so `docker compose up` starts it and
+# `docker compose down` stops it along with everything else. After the first
+# start, do the one-time MQTT integration setup in the HA UI (point it at
+# broker.hivemq.com:1883) — see README §7.
 # =============================================================================
 
 services:
@@ -131,6 +133,20 @@ services:
       ]
     volumes:
       - smartbin_data:/app/data
+    restart: unless-stopped
+
+  # Home Assistant — dashboard + MQTT entities. Starts with `up`, stops with `down`.
+  # host networking is recommended for HA on a Linux host (Raspberry Pi); it puts
+  # the UI on http://<host>:8123 and lets HA reach the broker directly.
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    network_mode: host
+    volumes:
+      - ./home_assistant:/config        # uses your configuration.yaml + dashboard.yaml
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      TZ: Europe/Athens
     restart: unless-stopped
 
 volumes:
