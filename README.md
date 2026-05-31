@@ -7,9 +7,8 @@ REST API, derives insight with rule‑based and ML **virtual sensors**, and
 visualises everything in a **Home Assistant** dashboard and a custom **live
 desktop dashboard**.
 
-The whole backend comes up with a single `docker compose up` — and because the
-edge node runs in **simulation mode** by default, you do **not** need a
-Raspberry Pi or any wiring to try it.
+The edge node reads the sensors over GPIO, so it runs on a Raspberry Pi. The
+rest of the backend comes up with a single `docker compose up`.
 
 > **Course:** Advanced Programming Techniques
 > **Group 10:** ΜΠΑΝΑΚΟΣ ΒΑΣΙΛΕΙΟΣ · ΠΑΠΑΔΟΠΟΥΛΟΣ ΧΑΡΑΛΑΜΠΟΣ · ΤΡΟΧΑΤΟΥ ΙΩΑΝΝΑ
@@ -65,15 +64,15 @@ Smart_Waste_Bin_Project/
 │   ├── wastebin.jsonld         # Bin entities
 │   ├── sensor.jsonld           # Sensor entities
 │   └── environment.jsonld      # Deployment environment
-├── pi_edge_node/               # Raspberry Pi tier
+├── pi_edge_node/               # Raspberry Pi tier (reads real GPIO)
 │   ├── motion_sensor_lib/      # Modular sense/interpret library (M3)
 │   │   ├── __init__.py
-│   │   ├── sampler.py          # PirSampler — raw GPIO reads (+ simulation)
+│   │   ├── sampler.py          # PirSampler — raw GPIO reads
 │   │   └── interpreter.py      # PirInterpreter — debounce/cooldown logic
 │   ├── pir_event_logger.py     # Local JSONL logger, pre-MQTT (M2)
 │   ├── pir_mqtt_producer.py    # MQTT publisher + HA discovery (PIR & MQ-3) (M6/M7)
-│   ├── pir_smoke_test.py       # Quick hardware/sim sanity check
-│   ├── debug_print_events.py   # Subscribe-and-print helper
+│   ├── pir_smoke_test.py       # Lowest-level GPIO wiring check
+│   ├── debug_print_events.py   # Library sanity check (sampler -> interpreter)
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── src/                        # Backend tier
@@ -120,10 +119,10 @@ Smart_Waste_Bin_Project/
 
 ---
 
-## 4. Quick Start (Docker backend)
+## 4. Quick Start (Docker, on the Raspberry Pi)
 
-> **Requirements:** Docker + Docker Compose. No Raspberry Pi needed — the edge
-> node runs simulated by default.
+> **Requirements:** Docker + Docker Compose running on a Raspberry Pi with the
+> HC‑SR501 PIR on **BCM 17** and the MQ‑3 gas sensor on **BCM 23**.
 
 ```bash
 cd Smart_Waste_Bin_Project
@@ -134,14 +133,15 @@ This will:
 
 - Connect every service to the public broker `broker.hivemq.com:1883`.
 - Run the one-shot `train` job, then start the **rule** and **ML** virtual sensors.
-- Start the **edge-node producer** in simulation mode, publishing as `bin-01` / `pir-01`.
+- Start the **edge-node producer**, which reads the real GPIO sensors (the
+  service runs `privileged` with `/dev` mounted) and publishes as `bin-01` / `pir-01`.
 - Start the **consumer** (writes `motion_events.jsonl` into the shared volume).
 - Start the **REST API** at `http://localhost:5000` (Swagger UI at `/`).
 
 Useful commands:
 
 ```bash
-docker compose logs -f producer     # watch simulated motion/gas events
+docker compose logs -f producer     # watch real motion/gas events
 docker compose ps                   # service status
 docker compose down                 # stop everything (add -v to wipe the volume)
 ```
@@ -152,7 +152,7 @@ Home Assistant runs separately — see §7.
 
 ## 5. Running Without Docker (Manual / Development)
 
-Create one virtual environment and install everything:
+On the Raspberry Pi, create a virtual environment and install everything:
 
 ```bash
 python -m venv .venv
@@ -160,26 +160,24 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### On a laptop (simulation)
-
-```bash
-python pi_edge_node/pir_mqtt_producer.py --broker broker.hivemq.com --simulate
-```
-
-### On the Raspberry Pi (real hardware)
-
-Wire the HC‑SR501 PIR to **BCM 17** and the MQ‑3 gas sensor to **BCM 23**, then:
+Then run the edge node against the wired sensors:
 
 ```bash
 python pi_edge_node/pir_mqtt_producer.py \
     --broker broker.hivemq.com \
     --pin 17 --gas-pin 23 \
-    --bin-id bin-01 --device-id pir-01 \
-    --no-simulate
+    --bin-id bin-01 --device-id pir-01
 ```
 
-> The producer auto-falls back to simulation if `gpiozero` can't reach the GPIO,
-> so it never crashes on a non-Pi machine. Use `--no-simulate` to force hardware.
+Before running the full producer it's worth checking the wiring:
+
+```bash
+python pi_edge_node/pir_smoke_test.py --pin 17        # raw voltage changes
+python pi_edge_node/debug_print_events.py --pin 17    # clean, debounced events
+```
+
+The backend services (`consumer`, `api`, virtual sensors) have no GPIO
+dependency and can run on any host that can reach the broker.
 
 ---
 
