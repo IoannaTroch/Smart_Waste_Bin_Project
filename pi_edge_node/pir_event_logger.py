@@ -4,9 +4,9 @@ pir_event_logger.py  —  local JSONL logger (Milestone 2 / Lab 02).
 
 Reads clean motion events from the library and appends one JSON object per line
 to a .jsonl file. This is the project's first persistence layer, before MQTT.
+Runs on a Raspberry Pi with the PIR wired to GPIO.
 
     python pir_event_logger.py --device-id pir-01 --pin 17 --output motion_events.jsonl
-    python pir_event_logger.py --device-id pir-01 --simulate
 """
 
 import argparse
@@ -31,10 +31,9 @@ def main() -> None:
     p.add_argument("--sample-interval", type=float, default=0.05)
     p.add_argument("--cooldown", type=float, default=5.0)
     p.add_argument("--min-high", type=float, default=0.2)
-    p.add_argument("--simulate", action="store_true", help="Run without real GPIO")
     args = p.parse_args()
 
-    sampler = PirSampler(args.pin, simulate=args.simulate)
+    sampler = PirSampler(args.pin)
     interp = PirInterpreter(cooldown_s=args.cooldown, min_high_s=args.min_high)
 
     run_id = str(uuid.uuid4())
