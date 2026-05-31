@@ -1,7 +1,10 @@
 # Raspberry Pi edge-node dependencies (Milestones 2-7)
+#
+# paho-mqtt is needed everywhere. The GPIO stack only installs on a real Pi
+# (ARM); on a laptop or in the amd64 simulation container it is skipped, and the
+# producer falls back to its software simulator. rpi-lgpio already pulls in
+# lgpio, so we don't list lgpio separately.
 paho-mqtt>=2.0.0
 
-# GPIO access on the Raspberry Pi. 
-gpiozero>=2.0 
-lgpio>=0.2 
-rpi-lgpio
+gpiozero>=2.0 ; platform_machine == "armv7l" or platform_machine == "aarch64"
+rpi-lgpio ; platform_machine == "armv7l" or platform_machine == "aarch64"
