@@ -43,7 +43,7 @@ services:
       BIN_ID: bin-01
       DEVICE_ID: pir-01
       LOCATION: "Lab Room 101 - Kitchen Corner"
-      PIR_SIMULATE: "1"
+      PIR_SIMULATE: "0"
     command:
       [
         "python",
