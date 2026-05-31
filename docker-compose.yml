@@ -1,7 +1,18 @@
 # =============================================================================
-# Smart Waste Bin — full system orchestration (Cloud Edition)
+# Smart Waste Bin — full backend orchestration (Cloud Edition)
 # -----------------------------------------------------------------------------
-# Backend is configured to use the public HiveMQ cloud broker!
+# The backend talks to the public HiveMQ broker (broker.hivemq.com:1883), so no
+# local broker is required. The producer runs in SIMULATION mode by default so
+# the whole stack comes up with a single `docker compose up` on any machine —
+# no Raspberry Pi or GPIO needed.
+#
+# To drive it from real hardware instead, run pir_mqtt_producer.py directly on
+# the Pi (see README §5), or set PIR_SIMULATE=0 here and add the GPIO mounts:
+#       privileged: true
+#       volumes: [ "/dev:/dev" ]
+#
+# Home Assistant is NOT part of this stack — it auto-discovers the bin once you
+# point its MQTT integration at the same broker (see README §7).
 # =============================================================================
 
 services:
@@ -19,32 +30,33 @@ services:
       - smartbin_data:/app/data
     restart: "no"
 
-  # The Producer is BACK ON and running in simulation mode!
- # The Producer is BACK ON and running in simulation mode!
+  # Edge node — simulated PIR + MQ-3, publishing as bin-01 / pir-01.
   producer:
     build:
       context: .
       dockerfile: pi_edge_node/Dockerfile
-    container_name: smartbin-hardware-node
-    privileged: true
-    volumes:
-      - /dev:/dev
+    container_name: smartbin-edge-node
     environment:
       PYTHONUNBUFFERED: "1"
       MQTT_BROKER: broker.hivemq.com
       MQTT_PORT: "1883"
+      BIN_ID: bin-01
+      DEVICE_ID: pir-01
+      LOCATION: "Lab Room 101 - Kitchen Corner"
+      PIR_SIMULATE: "1"
     command:
       [
         "python",
         "pi_edge_node/pir_mqtt_producer.py",
         "--broker", "broker.hivemq.com",
         "--port", "1883",
-        "--pin", "17",
-        "--gas-pin", "23",
-        "--bin-id", "bin-02",
-        "--device-id", "node-02"
+        "--bin-id", "bin-01",
+        "--device-id", "pir-01",
+        "--simulate",
+        "--ha-discovery"
       ]
     restart: unless-stopped
+
   consumer:
     build:
       context: .
@@ -85,7 +97,17 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       MQTT_BROKER: broker.hivemq.com
-    command: ["python", "src/virtual_sensor_rules.py", "--broker", "broker.hivemq.com", "--ha-discovery"]
+    # Defaults already target bin-01 / pir-01, but we pass them explicitly so
+    # the wiring is obvious and stays in sync with the producer above.
+    command:
+      [
+        "python", "src/virtual_sensor_rules.py",
+        "--broker", "broker.hivemq.com",
+        "--subscribe-topic", "smartbin/bin-01/pir-01/motion",
+        "--publish-topic", "smartbin/bin-01/usage",
+        "--bin-id", "bin-01",
+        "--ha-discovery"
+      ]
     restart: unless-stopped
 
   virtual_sensor_ml:
@@ -100,7 +122,15 @@ services:
       PYTHONUNBUFFERED: "1"
       MQTT_BROKER: broker.hivemq.com
       MODEL_PATH: /app/data/busy_predictor.joblib
-    command: ["python", "src/virtual_sensor_ml.py", "--broker", "broker.hivemq.com", "--model-path", "/app/data/busy_predictor.joblib", "--ha-discovery"]
+    command:
+      [
+        "python", "src/virtual_sensor_ml.py",
+        "--broker", "broker.hivemq.com",
+        "--model-path", "/app/data/busy_predictor.joblib",
+        "--publish-topic", "smartbin/bin-01/prediction",
+        "--bin-id", "bin-01",
+        "--ha-discovery"
+      ]
     volumes:
       - smartbin_data:/app/data
     restart: unless-stopped
