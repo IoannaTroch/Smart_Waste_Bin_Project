@@ -1,27 +1,38 @@
 # =============================================================================
-# Raspberry Pi edge-node image (Milestones 4, 6, 7)
+# Backend tier image (Milestones 4, 8, 9)
 # -----------------------------------------------------------------------------
-# This container reads the real HC-SR501 PIR and MQ-3 gas sensor over GPIO, so
-# it must run ON the Raspberry Pi and be given access to the hardware. In
-# docker-compose.yml that is done with `privileged: true` and a `/dev:/dev`
-# volume mount. Build the image on the Pi (or with buildx for arm64).
+# One image, several roles: the REST API, the MQTT consumer, the rule-based
+# virtual sensor, the ML virtual sensor, and the one-shot training job. The
+# command is chosen per-service in docker-compose.yml.
 # =============================================================================
 FROM python:3.12-slim
 
+# Avoid .pyc files and force unbuffered stdout so logs stream to `docker logs`.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY pi_edge_node/requirements.txt /app/requirements.txt
+# Install Python dependencies first for better layer caching.
+COPY src/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY pi_edge_node/ /app/pi_edge_node/
+# Copy the backend source and the shared data model.
+COPY src/ /app/src/
+COPY models/ /app/models/
 
-ENV MQTT_BROKER=broker.hivemq.com \
-    BIN_ID=bin-01 \
-    DEVICE_ID=pir-01 \
-    LOCATION="Lab Room 101"
+# Project-root-aware paths used by api.py (see MODELS_DIR / DATA_DIR env).
+ENV PROJECT_ROOT=/app \
+    MODELS_DIR=/app/models \
+    DATA_DIR=/app/data \
+    MQTT_BROKER=broker.hivemq.com \
+    API_PORT=5000
 
-# Default: publish real motion/gas events to the broker.
-CMD ["python", "pi_edge_node/pir_mqtt_producer.py"]
+# Shared data volume (motion_events.jsonl, trained model) lives here.
+RUN mkdir -p /app/data
+VOLUME ["/app/data"]
+
+EXPOSE 5000
+
+# Default role: REST API. Overridden per service in docker-compose.yml.
+CMD ["python", "src/api.py"]
