@@ -33,3 +33,4 @@ Thumbs.db
 
 # --- Logs ---
 *.log
+events_log.json
