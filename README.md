@@ -213,11 +213,16 @@ python laptop_dashboard/mqtt_gui_consumer.py --demo  # animates the live Tkinter
 
 | Name | Main Contributions |
 |---|---|
-| **Vasileios Banakos** | Edge node & sensor library (PIR/Gas), MQTT producer, wiring & hardware debugging |
-| **Charalampos Papadopoulos** | Backend: REST API, MQTT consumer, virtual sensors, Docker Compose orchestration |
-| **Ioanna Trochatou** | Data modelling, visualisation: Home Assistant, Seaborn analytics, Tkinter GUI, Node-RED |
+| **Vasileios Banakos** | Everything |
+| **Charalampos Papadopoulos** | Everything |
+| **Ioanna Trochatou** | Everything |
 
 ---
+## 11. Generative AIs used
+
+| **Claude AI** | 
+| **Perplexity AI** |
+| **Gemini AI** | 
 
 ## License
 
