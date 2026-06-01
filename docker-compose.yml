@@ -137,6 +137,18 @@ services:
     environment:
       TZ: Europe/Athens
     restart: unless-stopped
-
+# Node-RED — low-code flow layer. Editor at http://<host>:1880.
+  # FLOWS=flows.json auto-loads ./node_red/flows.json on start.
+  nodered:
+    image: nodered/node-red:latest
+    container_name: nodered
+    ports:
+      - "1880:1880"
+    environment:
+      TZ: Europe/Athens
+      FLOWS: flows.json
+    volumes:
+      - ./node_red:/data                # your flows.json lives here
+    restart: unless-stopped
 volumes:
   smartbin_data:
