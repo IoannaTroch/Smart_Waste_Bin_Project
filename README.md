@@ -1,4 +1,4 @@
-# 🗑️ Smart Waste Bin — IoT System
+# Smart Waste Bin — IoT System
 
 > *A waste bin that doesn't just sit there. It senses, thinks, and tells you when it needs attention.*
 
@@ -10,7 +10,7 @@ An end-to-end IoT pipeline that turns a **Raspberry Pi 5** with an **HC‑SR501 
 
 ---
 
-## ✨ What makes this interesting?
+## What makes this interesting?
 
 | Capability | Detail |
 |---|---|
