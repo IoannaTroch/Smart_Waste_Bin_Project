@@ -4,30 +4,21 @@
     "type": "tab",
     "label": "Smart Waste Bin - Gas",
     "disabled": false,
-    "info": "Node-RED gas-alert flow.\n\n1. Subscribe to the MQTT gas topic (any bin/device).\n2. React only when gas is 'detected'.\n3. Build a structured alert message.\n4. Publish it to smartbin/<bin>/alert and show it in debug.\n\nBroker is the public broker.hivemq.com, matching the rest of the project."
+    "info": "Gas alert flow: subscribe to gas -> when 'detected' -> build an alert ->\nfan out to BOTH an MQTT topic (mqtt out) AND the REST API (http request)."
   },
 
   {
-    "id": "hivemq_cfg",
+    "id": "broker_cfg",
     "type": "mqtt-broker",
-    "name": "HiveMQ (public)",
-    "broker": "broker.hivemq.com",
+    "name": "Broker",
+    "broker": "192.168.137.39",
     "port": "1883",
     "clientid": "node-red-smartbin-gas",
     "autoConnect": true,
     "usetls": false,
     "protocolVersion": "4",
     "keepalive": "60",
-    "cleansession": true,
-    "birthTopic": "smartbin/node-red/online",
-    "birthQos": "0",
-    "birthPayload": "true",
-    "closeTopic": "smartbin/node-red/online",
-    "closeQos": "0",
-    "closePayload": "false",
-    "willTopic": "smartbin/node-red/online",
-    "willQos": "0",
-    "willPayload": "false"
+    "cleansession": true
   },
 
   {
@@ -38,92 +29,98 @@
     "topic": "smartbin/+/+/gas",
     "qos": "1",
     "datatype": "utf8",
-    "broker": "hivemq_cfg",
-    "nl": false,
-    "rap": true,
-    "rh": 0,
-    "x": 140,
-    "y": 140,
-    "wires": [["filter_detected", "debug_raw_gas"]]
+    "broker": "broker_cfg",
+    "nl": false, "rap": true, "rh": 0,
+    "x": 130, "y": 160,
+    "wires": [["filter_detected"]]
   },
-
   {
     "id": "filter_detected",
     "type": "switch",
     "z": "tab_gas",
     "name": "is 'detected'?",
-    "property": "payload",
-    "propertyType": "msg",
+    "property": "payload", "propertyType": "msg",
     "rules": [{ "t": "eq", "v": "detected", "vt": "str" }],
-    "checkall": "true",
-    "repair": false,
-    "outputs": 1,
-    "x": 360,
-    "y": 140,
-    "wires": [["build_gas_alert"]]
+    "checkall": "true", "repair": false, "outputs": 1,
+    "x": 330, "y": 160,
+    "wires": [["delay_1s"]]
   },
-
   {
-    "id": "build_gas_alert",
+    "id": "delay_1s",
+    "type": "delay",
+    "z": "tab_gas",
+    "name": "delay 1s",
+    "pauseType": "delay",
+    "timeout": "1", "timeoutUnits": "seconds",
+    "rate": "1", "rateUnits": "second",
+    "randomFirst": "1", "randomLast": "5", "randomUnits": "seconds",
+    "drop": false,
+    "x": 510, "y": 160,
+    "wires": [["build_alert"]]
+  },
+  {
+    "id": "build_alert",
     "type": "function",
     "z": "tab_gas",
-    "name": "build gas alert",
-    "func": "// Topic looks like: smartbin/<bin>/<device>/gas\nconst parts = (msg.topic || '').split('/');\nconst binId = parts[1] || 'bin-01';\nconst dev   = parts[2] || 'pir-01';\n\nconst alert = {\n    bin_id: binId,\n    device_id: dev,\n    type: 'gas',\n    severity: 'critical',\n    message: `Gas detected at bin ${binId} (${dev})`,\n    ts: new Date().toISOString()\n};\n\nmsg.topic = `smartbin/${binId}/alert`;\nmsg.payload = JSON.stringify(alert);\nreturn msg;\n",
-    "outputs": 1,
-    "noerr": 0,
-    "initialize": "",
-    "finalize": "",
-    "libs": [],
-    "x": 580,
-    "y": 140,
-    "wires": [["mqtt_out_alert", "debug_alert"]]
+    "name": "build alert",
+    "func": "const parts = (msg.topic || \"\").split(\"/\");\nconst binId = parts[1] || \"bin-01\";\nconst alert = {\n    bin_id: binId,\n    type: \"gas\",\n    severity: \"critical\",\n    message: \"Gas detected at \" + binId,\n    ts: new Date().toISOString()\n};\nmsg.topic = \"smartbin/\" + binId + \"/alert\";\nmsg.payload = JSON.stringify(alert);\nreturn msg;\n",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 700, "y": 160,
+    "wires": [["mqtt_out_alert", "prep_api", "debug_alert"]]
   },
 
   {
     "id": "mqtt_out_alert",
     "type": "mqtt out",
     "z": "tab_gas",
-    "name": "publish alert",
-    "topic": "",
-    "qos": "1",
-    "retain": "false",
-    "broker": "hivemq_cfg",
-    "x": 820,
-    "y": 100,
+    "name": "MQTT out (alert)",
+    "topic": "", "qos": "1", "retain": "false",
+    "broker": "broker_cfg",
+    "x": 940, "y": 100,
     "wires": []
   },
 
   {
-    "id": "debug_raw_gas",
-    "type": "debug",
+    "id": "prep_api",
+    "type": "function",
     "z": "tab_gas",
-    "name": "raw gas",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": true,
-    "statusVal": "payload",
-    "statusType": "msg",
-    "complete": "payload",
-    "targetType": "msg",
-    "x": 360,
-    "y": 80,
-    "wires": []
+    "name": "prep API body",
+    "func": "// Build the body the REST API expects: POST /mqtt/publish\nmsg.headers = { \"Content-Type\": \"application/json\" };\nmsg.payload = {\n    topic: msg.topic,\n    payload: msg.payload,\n    qos: 1,\n    retain: false\n};\nreturn msg;\n",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 910, "y": 240,
+    "wires": [["http_api"]]
+  },
+  {
+    "id": "http_api",
+    "type": "http request",
+    "z": "tab_gas",
+    "name": "API (POST)",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:5000/mqtt/publish",
+    "persist": false,
+    "authType": "",
+    "x": 1110, "y": 240,
+    "wires": [["debug_api"]]
   },
 
   {
     "id": "debug_alert",
     "type": "debug",
     "z": "tab_gas",
-    "name": "gas alert out",
-    "active": true,
-    "tosidebar": true,
-    "console": true,
-    "tostatus": false,
-    "complete": "payload",
-    "targetType": "msg",
-    "x": 820,
-    "y": 180,
-    "wires": []
+    "name": "alert out",
+    "active": true, "tosidebar": true, "console": false,
+    "complete": "payload", "targetType": "msg",
+    "x": 940, "y": 160, "wires": []
+  },
+  {
+    "id": "debug_api",
+    "type": "debug",
+    "z": "tab_gas",
+    "name": "API response",
+    "active": true, "tosidebar": true, "console": false,
+    "complete": "payload", "targetType": "msg",
+    "x": 1310, "y": 240, "wires": []
   }
 ]
