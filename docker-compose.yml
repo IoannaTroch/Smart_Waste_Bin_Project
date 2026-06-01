@@ -30,6 +30,7 @@ services:
     restart: "no"
 
   # Edge node — real PIR + MQ-3 over GPIO, publishing as bin-01 / pir-01.
+  # Edge node — real PIR + MQ-3 over GPIO, publishing as bin-01 / pir-01.
   producer:
     build:
       context: .
@@ -45,7 +46,8 @@ services:
       BIN_ID: bin-01
       DEVICE_ID: pir-01
       LOCATION: "Lab Room 101 - Kitchen Corner"
-    command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--gas-pin", "23", "--bin-id", "bin-02", "--device-id", "node-02", "--min-high", "0.4"]
+    # Removed the conflicting --bin-id and --device-id flags from the command!
+    command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--gas-pin", "23", "--min-high", "0.4"]
     restart: unless-stopped
 
   consumer:
