@@ -1,17 +1,25 @@
-# Smart Waste Bin — IoT System
+# 🗑️ Smart Waste Bin — IoT System
 
-An end-to-end IoT pipeline that turns a **Raspberry Pi 5** with an **HC‑SR501 PIR
-motion sensor** and an **MQ‑3 gas sensor** into a **Smart Waste Bin**. It senses
-usage and gas levels, ships events over MQTT, persists and serves them through a
-REST API, derives insight with rule‑based and ML **virtual sensors**, and
-visualises everything in a **Home Assistant** dashboard and a custom **live
-desktop dashboard**.
+> *A waste bin that doesn't just sit there. It senses, thinks, and tells you when it needs attention.*
 
-The edge node reads the sensors over GPIO, so it runs on a Raspberry Pi. The
-rest of the stack comes up with a single `docker compose up`.
+An end-to-end IoT pipeline that turns a **Raspberry Pi 5** with an **HC‑SR501 PIR motion sensor** and an **MQ‑3 gas sensor** into a **Smart Waste Bin**. The system detects usage and gas events, ships them over MQTT, persists and serves them via a REST API, derives higher‑level insight with rule‑based and ML **virtual sensors**, and visualises everything in a **Home Assistant** dashboard and a custom **live desktop dashboard** — all from a single `docker compose up`.
 
-> **Course:** Advanced Programming Techniques
-> **Team 10:** Vasileios Banakos · Charalampos Papadopoulos · Ioanna Trochatou
+> **Course:** Advanced Programming Techniques  
+> **Team 10:** Vasileios Banakos · Charalampos Papadopoulos · Ioanna Trochatou  
+> **License:** MIT
+
+---
+
+## ✨ What makes this interesting?
+
+| Capability | Detail |
+|---|---|
+| **Real hardware sensing** | HC‑SR501 PIR on BCM 17, MQ‑3 gas sensor on BCM 23, running on Raspberry Pi 5 |
+| **Loose coupling** | Every component talks only through MQTT topics — swap or kill any service without touching the others |
+| **Semantic data** | Events are JSON‑LD using `schema.org` + `SOSA/SSN` — machine‑readable out of the box |
+| **Two virtual sensors** | A rule engine classifies usage intensity; a RandomForest predicts whether the next hour will be busy or quiet |
+| **Demo mode** | Both visual tools simulate live traffic without any hardware attached |
+| **One‑command deployment** | `docker compose up` starts everything: edge node, backend, ML trainer, Home Assistant |
 
 ---
 
@@ -37,10 +45,7 @@ rest of the stack comes up with a single `docker compose up`.
                               +------------+  +-----------------------+
 ```
 
-Every tier communicates only through the broker, so any component can be
-replaced, restarted, or moved to another host independently. The default bin
-identity across the whole system is **`bin-01` / `pir-01`** — the edge node, the
-virtual sensors, the Home Assistant entities and the JSON‑LD models all agree.
+The default bin identity across the whole system is **`bin-01` / `pir-01`** — the edge node, the virtual sensors, the Home Assistant entities, and the JSON‑LD models all share this identity so data flows without any translation layer.
 
 ---
 
@@ -90,41 +95,43 @@ Smart_Waste_Bin_Project/
 
 ## 3. Milestone Checklist
 
-| #   | Milestone                          | Where it lives                                                | Done |
-|-----|------------------------------------|---------------------------------------------------------------|------|
-| M1  | Project foundation & structure     | whole repo + this README                                      | done |
-| M2  | PIR integration + JSONL logging    | `pi_edge_node/pir_event_logger.py`                            | done |
-| M3  | Modular pipeline components        | `pi_edge_node/motion_sensor_lib/`                             | done |
-| M4  | Containerisation (single `up`)     | `docker-compose.yml`, Dockerfiles                             | done |
-| M5  | JSON-LD data modelling             | `models/`, `docs/ontology.md`                                 | done |
-| M6  | MQTT broker + producer/consumer    | broker.hivemq.com, `pir_mqtt_producer.py`, `mqtt_consumer.py` | done |
-| M7  | HA discovery + LWT online status   | `pir_mqtt_producer.py`                                         | done |
-| M8  | REST API + AsyncAPI spec           | `src/api.py`, `docs/asyncapi.yaml`                            | done |
-| M9  | Rule + ML virtual sensors          | `virtual_sensor_rules.py`, `virtual_sensor_ml.py`            | done |
-| M10 | Node-RED low-code layer            | `node_red/flows.json`                                         | done |
-| M11 | HA dashboard + Seaborn analytics   | `home_assistant/`, `analyze.py`, live GUI                     | done |
+| # | Milestone | Where it lives | Status |
+|---|---|---|---|
+| M1 | Project foundation & structure | whole repo + this README | ✅ done |
+| M2 | PIR integration + JSONL logging | `pi_edge_node/pir_event_logger.py` | ✅ done |
+| M3 | Modular pipeline components | `pi_edge_node/motion_sensor_lib/` | ✅ done |
+| M4 | Containerisation (single `up`) | `docker-compose.yml`, Dockerfiles | ✅ done |
+| M5 | JSON-LD data modelling | `models/`, `docs/ontology.md` | ✅ done |
+| M6 | MQTT broker + producer/consumer | broker.hivemq.com, `pir_mqtt_producer.py`, `mqtt_consumer.py` | ✅ done |
+| M7 | HA discovery + LWT online status | `pir_mqtt_producer.py` | ✅ done |
+| M8 | REST API + AsyncAPI spec | `src/api.py`, `docs/asyncapi.yaml` | ✅ done |
+| M9 | Rule + ML virtual sensors | `virtual_sensor_rules.py`, `virtual_sensor_ml.py` | ✅ done |
+| M10 | Node-RED low-code layer | `node_red/flows.json` | ✅ done |
+| M11 | HA dashboard + Seaborn analytics | `home_assistant/`, `analyze.py`, live GUI | ✅ done |
 
 ---
 
-## 4. Quick Start (Docker, on the Raspberry Pi)
+## 4. Quick Start (Docker — recommended)
 
-> **Requirements:** Docker + Docker Compose on a Raspberry Pi with the HC‑SR501
-> PIR on **BCM 17** and the MQ‑3 gas sensor on **BCM 23**.
+> **Requirements:** Docker + Docker Compose on a Raspberry Pi with HC‑SR501 PIR on **BCM 17** and MQ‑3 gas sensor on **BCM 23**.
 
 ```bash
 cd Smart_Waste_Bin_Project
 docker compose up -d --build
 ```
 
-This connects every service to `broker.hivemq.com:1883`, runs the one-shot
-`train` job, starts the rule + ML virtual sensors, starts the edge-node producer
-(reading real GPIO via `privileged` + `/dev`), the consumer, the REST API
-(`http://localhost:5000`, Swagger at `/`), and Home Assistant.
+This single command:
+- Trains the RandomForest ML model (`train` job, runs once)
+- Starts the edge producer (reads real PIR + gas over GPIO)
+- Starts the MQTT consumer (persists events to JSONL)
+- Starts the REST API at **http://localhost:5000** (Swagger UI at `/`)
+- Starts rule + ML virtual sensors
+- Starts Home Assistant at **http://localhost:8123**
 
 ```bash
 docker compose logs -f producer     # watch real motion/gas events
-docker compose ps                   # service status
-docker compose down                 # stop everything (add -v to wipe the volume)
+docker compose ps                   # check service health
+docker compose down                 # stop everything (-v also wipes the volume)
 ```
 
 ---
@@ -135,18 +142,17 @@ docker compose down                 # stop everything (add -v to wipe the volume
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# wiring sanity checks first
-python pi_edge_node/pir_smoke_test.py --pin 17        # raw voltage changes
+# Verify wiring first
+python pi_edge_node/pir_smoke_test.py --pin 17        # raw voltage changes on the pin
 python pi_edge_node/debug_print_events.py --pin 17    # clean, debounced events
 
-# the real edge node
+# Start the edge node
 python pi_edge_node/pir_mqtt_producer.py \
     --broker broker.hivemq.com --pin 17 --gas-pin 23 \
     --bin-id bin-01 --device-id pir-01
 ```
 
-The backend services (`consumer`, `api`, virtual sensors) have no GPIO
-dependency and run on any host that can reach the broker.
+The backend services (`consumer`, `api`, virtual sensors) have no GPIO dependency and run on any host that can reach the broker.
 
 ---
 
@@ -154,68 +160,64 @@ dependency and run on any host that can reach the broker.
 
 Swagger UI: `http://localhost:5000/`
 
-| Method | Endpoint                  | Description                              |
-|--------|---------------------------|------------------------------------------|
-| GET    | `/health/`                | Liveness + broker status                 |
-| GET    | `/bins/`                  | List all bins                            |
-| GET    | `/bins/<id>`              | One bin                                  |
-| GET    | `/bins/<id>/events`       | Recent events for a bin (by `bin_id`)    |
-| POST   | `/bins/<id>/emptied`      | Record an "emptied" action + publish     |
-| GET    | `/sensors/`               | List sensors                             |
-| GET    | `/virtual/`               | Latest usage intensity + ML prediction   |
-| POST   | `/mqtt/publish`           | Publish an arbitrary MQTT message        |
-| GET    | `/mqtt/topics`            | Last message per known topic             |
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/health/` | Liveness + broker connectivity |
+| GET | `/bins/` | List all known bins |
+| GET | `/bins/<id>` | Single bin detail |
+| GET | `/bins/<id>/events` | Recent events for a bin |
+| POST | `/bins/<id>/emptied` | Record an "emptied" action + publish to MQTT |
+| GET | `/sensors/` | List all sensors |
+| GET | `/virtual/` | Latest usage intensity + ML prediction |
+| POST | `/mqtt/publish` | Publish an arbitrary MQTT message |
+| GET | `/mqtt/topics` | Last known payload per topic |
 
 ---
 
-## 7. Home Assistant
+## 7. MQTT Topic Scheme
 
-Home Assistant runs as the `homeassistant` service in `docker-compose.yml`
-(`up` starts it, `down` stops it). It mounts `home_assistant/` as `/config`, so
-it uses the project `configuration.yaml` and `dashboard.yaml`. UI at
-`http://<host>:8123` (dashboard at `/smart-waste-bin/overview`).
-
-On first run, add the MQTT integration via **Settings → Devices & Services →
-Add Integration → MQTT**, pointing at `broker.hivemq.com:1883`. After that,
-**auto-discovery** creates the *Smart Bin bin-01* device with motion, gas,
-online, event-count, last-motion, usage-intensity and busy-prediction entities.
+| Topic | Payload | Producer |
+|---|---|---|
+| `smartbin/<bin>/<dev>/motion` | `detected` / `clear` | edge node |
+| `smartbin/<bin>/<dev>/gas` | `detected` / `clear` | edge node |
+| `smartbin/<bin>/<dev>/events` | rich JSON‑LD event | edge node |
+| `smartbin/<bin>/<dev>/event_count` | integer (retained) | edge node |
+| `smartbin/<bin>/<dev>/last_motion` | ISO timestamp | edge node |
+| `smartbin/<bin>/<dev>/online` | `true` / `false` (LWT) | edge node |
+| `smartbin/<bin>/usage` | JSON usage level | rule sensor |
+| `smartbin/<bin>/prediction` | JSON busy/quiet + confidence | ML sensor |
+| `smartbin/<bin>/alert` | JSON alert message | Node-RED |
 
 ---
 
-## 8. Demo / Showcase Without Hardware
+## 8. Home Assistant Setup
 
-Both visual tools have a built-in demo mode so they can be shown without a Pi or
-a live broker:
+Home Assistant runs as the `homeassistant` service and is accessible at **http://\<host\>:8123** (dashboard at `/smart-waste-bin/overview`).
+
+On first run: **Settings → Devices & Services → Add Integration → MQTT**, point it at `broker.hivemq.com:1883`. MQTT auto-discovery then creates the *Smart Bin bin-01* device with all entities (motion, gas, online, event count, last motion, usage intensity, ML prediction) — no manual YAML needed.
+
+---
+
+## 9. Demo Mode (no hardware required)
+
+Both visual tools can run entirely without a Raspberry Pi:
 
 ```bash
-python laptop_dashboard/analyze.py --demo            # generate synthetic data + 6 charts
-python laptop_dashboard/mqtt_gui_consumer.py --demo  # animate the live dashboard
+python laptop_dashboard/analyze.py --demo            # generates synthetic data + 6 Seaborn charts
+python laptop_dashboard/mqtt_gui_consumer.py --demo  # animates the live Tkinter dashboard
 ```
-
----
-
-## 9. MQTT Topic Scheme
-
-| Topic                                  | Payload                | Producer    | Consumers              |
-|----------------------------------------|------------------------|-------------|------------------------|
-| `smartbin/<bin>/<dev>/motion`          | `detected` / `clear`   | edge node   | HA, rules, GUI         |
-| `smartbin/<bin>/<dev>/gas`             | `detected` / `clear`   | edge node   | HA, GUI                |
-| `smartbin/<bin>/<dev>/events`          | rich JSON‑LD event     | edge node   | consumer, API, analyze |
-| `smartbin/<bin>/<dev>/event_count`     | integer (retained)     | edge node   | HA                     |
-| `smartbin/<bin>/<dev>/last_motion`     | ISO timestamp          | edge node   | HA                     |
-| `smartbin/<bin>/<dev>/online`          | `true` / `false` (LWT) | edge node   | HA, GUI                |
-| `smartbin/<bin>/usage`                 | JSON usage level       | rule sensor | HA, API, GUI           |
-| `smartbin/<bin>/prediction`            | JSON busy/quiet        | ML sensor   | HA, API, GUI           |
 
 ---
 
 ## 10. Team (Group 10)
 
-| Name                     | Contributions                                                  |
-|--------------------------|----------------------------------------------------------------|
-| Vasileios Banakos        | Edge node & sensor library (PIR/Gas), MQTT producer            |
-| Charalampos Papadopoulos | Backend: REST API, consumer, virtual sensors, Docker Compose   |
-| Ioanna Trochatou         | Data modelling & visualisation: HA, Seaborn, GUI, Node‑RED     |
+| Name | Main Contributions |
+|---|---|
+| **Vasileios Banakos** | Edge node & sensor library (PIR/Gas), MQTT producer, wiring & hardware debugging |
+| **Charalampos Papadopoulos** | Backend: REST API, MQTT consumer, virtual sensors, Docker Compose orchestration |
+| **Ioanna Trochatou** | Data modelling, visualisation: Home Assistant, Seaborn analytics, Tkinter GUI, Node-RED |
+
+---
 
 ## License
 
