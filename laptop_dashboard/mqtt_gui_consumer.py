@@ -5,8 +5,10 @@ mqtt_gui_consumer.py  —  advanced live dashboard (Milestone 11 + Dashboard).
 A dark-themed Tkinter operations console for the Smart Waste Bin. It subscribes
 to the whole `smartbin/#` tree on the broker and routes messages by topic:
 
-    .../events       rich JSON motion event   -> KPIs, charts, live feed, JSONL log
-    .../motion       "detected"/"clear"       -> live status indicator
+    .../events       rich JSON motion event    -> KPIs, charts, live feed, JSONL log
+    .../motion       "detected"/"clear"        -> live status indicator
+    .../gas          "detected"/"clear"        -> gas alert banner + KPI
+    .../online       "true"/"false" (LWT)      -> online/offline tracking
     .../usage        rule-based virtual sensor -> Usage Intensity card (color-coded)
     .../prediction   ML virtual sensor         -> Next-Hour Prediction card
     .../status       retained bin status       -> system overview
@@ -16,14 +18,15 @@ detail), color-coded states (idle/low/medium/high, busy/quiet, online/offline),
 conditional alerts, and a system-overview footer.
 
 Run:
-    python mqtt_gui_consumer.py
-    python mqtt_gui_consumer.py --broker localhost --topic "smartbin/#"
+    python mqtt_gui_consumer.py --broker broker.hivemq.com
+    python mqtt_gui_consumer.py --demo        # no broker needed: animated showcase
 """
 
 import argparse
 import csv
 import json
 import queue
+import random
 import threading
 import time
 from collections import deque, defaultdict
@@ -41,7 +44,7 @@ import paho.mqtt.client as mqtt
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
-MQTT_BROKER = "localhost"
+MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
 MQTT_TOPIC = "smartbin/#"
 LOG_FILE = "events_log.json"
@@ -51,6 +54,7 @@ ALERT_THRESH = 10  # events/hour before a "needs checking" alert
 BG, SURFACE, SURFACE2, BORDER = "#0d1117", "#161b22", "#1c2128", "#30363d"
 ACCENT, ACCENT2, PURPLE = "#00d084", "#58a6ff", "#d2a8ff"
 TEXT, MUTED, WARN, ERROR = "#e6edf3", "#8b949e", "#f0883e", "#ff7b72"
+GOLD = "#e3b341"
 
 LEVEL_COLORS = {"idle": MUTED, "low": ACCENT, "medium": WARN, "high": ERROR}
 PREDICT_COLORS = {"busy": WARN, "quiet": ACCENT}
@@ -63,17 +67,20 @@ plt.rcParams.update({
 
 
 class Dashboard:
-    def __init__(self, root, broker, port, topic):
+    def __init__(self, root, broker, port, topic, demo=False):
         self.root, self.broker, self.port, self.topic = root, broker, port, topic
-        root.title("Smart Waste Bin  -  Live Operations Dashboard")
-        root.geometry("1240x860")
+        self.demo = demo
+        root.title("Smart Waste Bin  -  Live Operations Dashboard" + ("  [DEMO]" if demo else ""))
+        root.geometry("1320x920")
         root.configure(bg=BG)
+        root.minsize(1100, 780)
 
         # data stores
         self.q = queue.Queue()
         self.saved_data = []
         self.last_time = None
         self.counter = 0
+        self.msg_count = 0
         self.session_start = time.time()
         self.delays = deque(maxlen=60)
         self.x_events = deque(maxlen=60)
@@ -84,30 +91,38 @@ class Dashboard:
         self.events_this_hour = 0
         self._hour_mark = datetime.now().hour
         self.per_bin = defaultdict(int)
+        self.online = {}
+        self.gas_active = set()
         self.usage_level = "—"
         self.prediction = "—"
         self.motion_state = "idle"
+        self._stop = False
 
         self._build_ui()
-        self._setup_mqtt()
+        self._setup_source()
         self._poll()
         self._tick()
 
     # ══════════════════════════════════════════════ UI ═══════════════════════
     def _build_ui(self):
         # Top bar
-        top = tk.Frame(self.root, bg=SURFACE, height=56); top.pack(fill=tk.X); top.pack_propagate(False)
-        tk.Label(top, text="🗑", font=("Arial", 20), bg=SURFACE, fg=ACCENT).pack(side=tk.LEFT, padx=(16, 6))
-        tk.Label(top, text="Smart Waste Bin", font=("Arial", 14, "bold"), bg=SURFACE, fg=TEXT).pack(side=tk.LEFT)
+        top = tk.Frame(self.root, bg=SURFACE, height=58); top.pack(fill=tk.X); top.pack_propagate(False)
+        tk.Label(top, text="🗑", font=("Arial", 22), bg=SURFACE, fg=ACCENT).pack(side=tk.LEFT, padx=(16, 6))
+        tk.Label(top, text="Smart Waste Bin", font=("Arial", 15, "bold"), bg=SURFACE, fg=TEXT).pack(side=tk.LEFT)
         tk.Label(top, text="Live Operations Dashboard", font=("Arial", 10), bg=SURFACE, fg=MUTED).pack(side=tk.LEFT, padx=(6, 0))
 
-        pill = tk.Frame(top, bg=SURFACE); pill.pack(side=tk.RIGHT, padx=16)
-        self.dot = tk.Label(pill, text="●", font=("Arial", 13), bg=SURFACE, fg=WARN); self.dot.pack(side=tk.LEFT)
-        self.status_lbl = tk.Label(pill, text="Connecting…", font=("Arial", 10), bg=SURFACE, fg=WARN); self.status_lbl.pack(side=tk.LEFT, padx=(4, 0))
-        self.alert_lbl = tk.Label(top, text="", font=("Arial", 10, "bold"), bg=WARN, fg=BG, padx=10, pady=3)
         tk.Button(top, text="↓  Export CSV", font=("Arial", 10, "bold"), bg=ACCENT2, fg=BG,
                   relief="flat", padx=12, pady=3, cursor="hand2", command=self._save_csv,
-                  activebackground="#79c0ff").pack(side=tk.RIGHT, padx=(0, 10), pady=10)
+                  activebackground="#79c0ff").pack(side=tk.RIGHT, padx=(0, 14), pady=12)
+
+        pill = tk.Frame(top, bg=SURFACE); pill.pack(side=tk.RIGHT, padx=10)
+        self.dot = tk.Label(pill, text="●", font=("Arial", 13), bg=SURFACE, fg=WARN); self.dot.pack(side=tk.LEFT)
+        self.status_lbl = tk.Label(pill, text="Connecting…", font=("Arial", 10), bg=SURFACE, fg=WARN); self.status_lbl.pack(side=tk.LEFT, padx=(4, 0))
+
+        self.clock_lbl = tk.Label(top, text="--:--:--", font=("Courier", 12, "bold"), bg=SURFACE, fg=MUTED)
+        self.clock_lbl.pack(side=tk.RIGHT, padx=14)
+        self.msgs_lbl = tk.Label(top, text="0 msgs", font=("Courier", 9), bg=SURFACE, fg=MUTED)
+        self.msgs_lbl.pack(side=tk.RIGHT, padx=4)
 
         # KPI strip
         kpis = tk.Frame(self.root, bg=BG); kpis.pack(fill=tk.X, padx=14, pady=(12, 0))
@@ -123,9 +138,15 @@ class Dashboard:
         self.kpi_usage = self._kpi(vs, "USAGE INTENSITY  (rule sensor)", "—", MUTED)
         self.kpi_predict = self._kpi(vs, "NEXT-HOUR PREDICTION  (ML sensor)", "—", MUTED)
         self.kpi_motion = self._kpi(vs, "LIVE MOTION", "idle", MUTED)
+        self.kpi_gas = self._kpi(vs, "GAS  (MQ-3)", "—", MUTED)
+
+        # Gas alert banner (hidden until a gas alert fires)
+        self.gas_banner = tk.Label(self.root, text="", font=("Arial", 12, "bold"),
+                                   bg=ERROR, fg="#ffffff", pady=9)
 
         # Main area
         main = tk.Frame(self.root, bg=BG); main.pack(fill=tk.BOTH, expand=True, padx=14, pady=10)
+        self.main = main
         main.columnconfigure(0, weight=1); main.columnconfigure(1, weight=2); main.rowconfigure(0, weight=1)
 
         left = tk.Frame(main, bg=BG); left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
@@ -137,7 +158,7 @@ class Dashboard:
                             state="disabled", relief="flat", padx=10, pady=4, selectbackground=ACCENT2)
         self.feed.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 8))
         for tag, color in [("ts", MUTED), ("ok", ACCENT), ("warn", WARN), ("error", ERROR),
-                           ("info", ACCENT2), ("dev", PURPLE)]:
+                           ("info", ACCENT2), ("dev", PURPLE), ("gold", GOLD)]:
             self.feed.tag_config(tag, foreground=color)
 
         ov = tk.Frame(left, bg=SURFACE2, padx=14, pady=10); ov.grid(row=1, column=0, sticky="nsew")
@@ -147,15 +168,17 @@ class Dashboard:
         self.overview_lbl = tk.Label(ov, text="Bins seen: —", font=("Courier", 9), bg=SURFACE2, fg=MUTED, justify="left", anchor="w"); self.overview_lbl.pack(anchor="w", pady=(6, 0))
 
         right = tk.Frame(main, bg=BG); right.grid(row=0, column=1, sticky="nsew")
-        for i, w in enumerate((3, 2, 2)):
+        for i, w in enumerate((3, 2, 2, 2)):
             right.rowconfigure(i, weight=w)
         right.columnconfigure(0, weight=1)
-        self.fig1, self.ax1 = self._chart_frame(right, 0, "DELAY BETWEEN EVENTS  (s)", 5.6, 2.4)
+        self.fig1, self.ax1 = self._chart_frame(right, 0, "DELAY BETWEEN EVENTS  (s)", 5.6, 2.1)
         self.canvas1 = self._embed(self.fig1, right, 0)
-        self.fig2, self.ax2 = self._chart_frame(right, 1, "EVENTS / 10s BUCKET", 5.6, 1.8)
+        self.fig2, self.ax2 = self._chart_frame(right, 1, "EVENTS / 10s BUCKET", 5.6, 1.5)
         self.canvas2 = self._embed(self.fig2, right, 1)
-        self.fig3, self.ax3 = self._chart_frame(right, 2, "USAGE BY HOUR OF DAY  (today)", 5.6, 1.8)
+        self.fig3, self.ax3 = self._chart_frame(right, 2, "USAGE BY HOUR OF DAY  (today)", 5.6, 1.5)
         self.canvas3 = self._embed(self.fig3, right, 2)
+        self.fig4, self.ax4 = self._chart_frame(right, 3, "TOTAL EVENTS PER BIN", 5.6, 1.5)
+        self.canvas4 = self._embed(self.fig4, right, 3)
 
     def _kpi(self, parent, label, value, color):
         f = tk.Frame(parent, bg=SURFACE2, padx=12, pady=8)
@@ -166,7 +189,7 @@ class Dashboard:
 
     def _chart_frame(self, parent, row, title, w, h):
         frame = tk.Frame(parent, bg=SURFACE)
-        frame.grid(row=row, column=0, sticky="nsew", pady=(0, 6) if row < 2 else 0)
+        frame.grid(row=row, column=0, sticky="nsew", pady=(0, 6) if row < 3 else 0)
         tk.Label(frame, text=title, font=("Courier", 8, "bold"), bg=SURFACE, fg=MUTED, anchor="w").pack(fill=tk.X, padx=12, pady=(8, 0))
         fig, ax = plt.subplots(figsize=(w, h)); fig.patch.set_facecolor(BG); ax.set_facecolor(SURFACE); ax.grid(True)
         fig.tight_layout(pad=1.1)
@@ -185,10 +208,19 @@ class Dashboard:
         self.feed.config(state="normal")
         self.feed.insert(tk.END, f"[{ts}] ", "ts")
         self.feed.insert(tk.END, text + "\n", tag)
+        # cap feed length to keep it snappy
+        if int(self.feed.index("end-1c").split(".")[0]) > 500:
+            self.feed.delete("1.0", "200.0")
         self.feed.see(tk.END)
         self.feed.config(state="disabled")
 
-    # ══════════════════════════════════════════════ MQTT ═════════════════════
+    # ══════════════════════════════════════════════ source ══════════════════
+    def _setup_source(self):
+        if self.demo:
+            self._start_demo()
+            return
+        self._setup_mqtt()
+
     def _setup_mqtt(self):
         try:
             self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -229,6 +261,51 @@ class Dashboard:
             payload = str(msg.payload)
         self.q.put({"t": "data", "topic": msg.topic, "v": payload})
 
+    # ── Demo feeder: synthesises a realistic stream with no broker ────────────
+    def _start_demo(self):
+        self.q.put({"t": "conn", "v": "demo"})
+
+        def feed():
+            rng = random.Random()
+            bins = [("bin-01", "pir-01", "Kitchen Corner", 1.0),
+                    ("bin-02", "pir-02", "Entrance", 0.55)]
+            seq = {b[0]: 0 for b in bins}
+            for b in bins:
+                self.q.put({"t": "data", "topic": f"smartbin/{b[0]}/{b[1]}/online", "v": "true"})
+            n = 0
+            while not self._stop:
+                hour = datetime.now().hour
+                base = 6 if 11 <= hour <= 14 else 4 if 8 <= hour <= 18 else 2 if 19 <= hour <= 21 else 1
+                b = rng.choices(bins, weights=[bb[3] for bb in bins])[0]
+                bin_id, dev, locname, _ = b
+                seq[bin_id] += 1; n += 1
+
+                self.q.put({"t": "data", "topic": f"smartbin/{bin_id}/{dev}/motion", "v": "detected"})
+                ev = {"name": "MotionDetected", "bin_id": bin_id, "device_id": dev,
+                      "eventNumber": seq[bin_id], "madeBySensor": dev,
+                      "location": {"@type": "Place", "name": locname},
+                      "cpu_temp_c": round(rng.uniform(45, 60), 1)}
+                self.q.put({"t": "data", "topic": f"smartbin/{bin_id}/{dev}/events", "v": json.dumps(ev)})
+                time.sleep(rng.uniform(0.15, 0.5))
+                self.q.put({"t": "data", "topic": f"smartbin/{bin_id}/{dev}/motion", "v": "clear"})
+
+                if n % 4 == 0:
+                    lvl = rng.choices(["idle", "low", "medium", "high"], weights=[1, 3, 3, 2])[0]
+                    self.q.put({"t": "data", "topic": f"smartbin/{bin_id}/usage",
+                                "v": json.dumps({"usage_level": lvl, "event_count": rng.randint(0, 25), "window_minutes": 10})})
+                if n % 6 == 0:
+                    pred = rng.choice(["busy", "quiet"])
+                    self.q.put({"t": "data", "topic": f"smartbin/{bin_id}/prediction",
+                                "v": json.dumps({"prediction": pred, "confidence": round(rng.uniform(0.62, 0.98), 2)})})
+                if n % 19 == 0:
+                    self.q.put({"t": "data", "topic": f"smartbin/{bin_id}/{dev}/gas", "v": "detected"})
+                    time.sleep(rng.uniform(1.2, 2.4))
+                    self.q.put({"t": "data", "topic": f"smartbin/{bin_id}/{dev}/gas", "v": "clear"})
+
+                time.sleep(max(0.25, rng.expovariate(base / 3.0)))
+
+        threading.Thread(target=feed, daemon=True).start()
+
     # ══════════════════════════════════════════════ poll ═════════════════════
     def _poll(self):
         try:
@@ -240,10 +317,14 @@ class Dashboard:
                     if item["v"] == "ok":
                         self._set_status("● Connected", ACCENT)
                         self._log(f"✓ Connected — subscribed to {self.topic}", "ok")
+                    elif item["v"] == "demo":
+                        self._set_status("● Demo Mode", PURPLE)
+                        self._log("Demo mode — synthesising live traffic (no broker)", "dev")
                     else:
                         self._set_status("● Disconnected", ERROR)
                         self._log("Connection lost.", "error")
                 elif item["t"] == "data":
+                    self.msg_count += 1
                     self._route(item["topic"], item["v"])
         except queue.Empty:
             pass
@@ -258,6 +339,10 @@ class Dashboard:
             self._handle_event(topic, payload)
         elif topic.endswith("/motion"):
             self._handle_motion(payload)
+        elif topic.endswith("/gas"):
+            self._handle_gas(topic, payload)
+        elif topic.endswith("/online"):
+            self._handle_online(topic, payload)
         elif topic.endswith("/usage"):
             self._handle_usage(payload)
         elif topic.endswith("/prediction"):
@@ -271,6 +356,44 @@ class Dashboard:
             self.motion_state = "ACTIVE" if state == "detected" else "idle"
             color = ERROR if state == "detected" else MUTED
             self.kpi_motion.config(text=self.motion_state, fg=color)
+
+    def _handle_gas(self, topic, payload):
+        state = payload.strip().strip('"')
+        parts = topic.split("/")
+        bin_id = parts[1] if len(parts) > 1 else "?"
+        dev = parts[2] if len(parts) > 2 else "?"
+        if state == "detected":
+            if topic not in self.gas_active:
+                self._log(f"⚠ GAS ALERT  bin={bin_id} device={dev}", "error")
+            self.gas_active.add(topic)
+        else:
+            if topic in self.gas_active:
+                self._log(f"gas cleared  bin={bin_id}", "ok")
+            self.gas_active.discard(topic)
+        self._refresh_gas()
+
+    def _refresh_gas(self):
+        if self.gas_active:
+            devs = ", ".join(sorted({t.split("/")[1] for t in self.gas_active}))
+            self.gas_banner.config(text=f"⚠   GAS DETECTED — {devs}   —   ventilate and check the bin")
+            if not self.gas_banner.winfo_ismapped():
+                self.gas_banner.pack(fill=tk.X, padx=14, pady=(8, 0), before=self.main)
+            self.kpi_gas.config(text="ALERT", fg=ERROR)
+        else:
+            if self.gas_banner.winfo_ismapped():
+                self.gas_banner.pack_forget()
+            self.kpi_gas.config(text="CLEAR", fg=ACCENT)
+
+    def _handle_online(self, topic, payload):
+        state = payload.strip().strip('"').lower()
+        parts = topic.split("/")
+        dev = parts[2] if len(parts) > 2 else parts[-1]
+        was = self.online.get(dev)
+        self.online[dev] = (state == "true")
+        if was != self.online[dev]:
+            self._log(f"{dev} is {'ONLINE' if self.online[dev] else 'OFFLINE'}",
+                      "ok" if self.online[dev] else "error")
+        self._refresh_overview()
 
     def _handle_usage(self, payload):
         try:
@@ -316,7 +439,7 @@ class Dashboard:
 
         self.kpi_device.config(text=str(device)[:14])
         self.per_bin[bin_id] += 1
-        self.overview_lbl.config(text="Bins seen: " + "  ".join(f"{b}={n}" for b, n in sorted(self.per_bin.items())))
+        self._refresh_overview()
 
         hr = datetime.now().hour
         self.hourly[hr] += 1
@@ -338,8 +461,9 @@ class Dashboard:
             self.bucket_counts.append(self._bucket_n); self._bucket_n = 0; self._bucket_t = now
             self._update_bar()
         self._update_hourly()
+        self._update_perbin()
 
-        self.dot.config(fg="#ffffff"); self.root.after(150, lambda: self.dot.config(fg=ACCENT))
+        self.dot.config(fg="#ffffff"); self.root.after(150, lambda: self.dot.config(fg=PURPLE if self.demo else ACCENT))
 
         self.saved_data.append([time.strftime("%H:%M:%S"), self.counter, round(delay, 3), bin_id, device, payload])
         try:
@@ -351,8 +475,19 @@ class Dashboard:
         except Exception as e:
             self._log(f"JSON log error: {e}", "error")
 
+    def _refresh_overview(self):
+        bins = "  ".join(f"{b}={n}" for b, n in sorted(self.per_bin.items())) or "—"
+        on = sorted(d for d, o in self.online.items() if o)
+        off = sorted(d for d, o in self.online.items() if not o)
+        line = f"Bins seen: {bins}\nOnline: {', '.join(on) or '—'}"
+        if off:
+            line += f"\nOffline: {', '.join(off)}"
+        self.overview_lbl.config(text=line)
+
     # ══════════════════════════════════════════════ ticker ═══════════════════
     def _tick(self):
+        self.clock_lbl.config(text=time.strftime("%H:%M:%S"))
+        self.msgs_lbl.config(text=f"{self.msg_count} msgs")
         elapsed = int(time.time() - self.session_start)
         h, r = divmod(elapsed, 3600); m, s = divmod(r, 60)
         self.kpi_uptime.config(text=f"{h}h {m}m {s}s" if h else (f"{m}m {s}s" if m else f"{s}s"))
@@ -360,11 +495,16 @@ class Dashboard:
             self.last_seen_ago.config(text=f"{int(time.time() - self.last_time)}s ago")
         if datetime.now().hour != self._hour_mark:
             self.events_this_hour = 0; self._hour_mark = datetime.now().hour
-        if self.events_this_hour >= ALERT_THRESH:
-            self.alert_lbl.config(text=f"⚠  {self.events_this_hour} events this hour — bin needs checking")
-            self.alert_lbl.pack(side=tk.LEFT, padx=10)
-        else:
-            self.alert_lbl.pack_forget()
+        if self.events_this_hour >= ALERT_THRESH and not self.gas_active:
+            self.gas_banner.config(text=f"⚠   {self.events_this_hour} events this hour — bin may need checking",
+                                   bg=WARN)
+            if not self.gas_banner.winfo_ismapped():
+                self.gas_banner.pack(fill=tk.X, padx=14, pady=(8, 0), before=self.main)
+        elif not self.gas_active and self.gas_banner.cget("bg") == WARN and self.gas_banner.winfo_ismapped():
+            self.gas_banner.pack_forget()
+        # keep gas banner red when a real gas alert is active
+        if self.gas_active:
+            self.gas_banner.config(bg=ERROR)
         self.root.after(1000, self._tick)
 
     # ══════════════════════════════════════════════ charts ═══════════════════
@@ -402,6 +542,24 @@ class Dashboard:
         self.ax3.set_ylim(0, (max(self.hourly) or 1) * 1.3 + 1)
         self.fig3.tight_layout(pad=1.1); self.canvas3.draw_idle()
 
+    def _update_perbin(self):
+        items = sorted(self.per_bin.items())
+        if not items:
+            return
+        labels = [b for b, _ in items]
+        vals = [n for _, n in items]
+        palette = [ACCENT2, PURPLE, ACCENT, WARN, GOLD]
+        colors = [palette[i % len(palette)] for i in range(len(vals))]
+        self.ax4.cla(); self.ax4.set_facecolor(SURFACE); self.ax4.grid(True, axis="x")
+        self.ax4.barh(range(len(vals)), vals, color=colors, height=0.55)
+        self.ax4.set_yticks(range(len(labels)))
+        self.ax4.set_yticklabels(labels, fontsize=8)
+        self.ax4.set_xlabel("Total events", fontsize=8)
+        self.ax4.set_xlim(0, (max(vals) or 1) * 1.18 + 1)
+        for i, v in enumerate(vals):
+            self.ax4.text(v + max(vals) * 0.02 + 0.1, i, str(v), va="center", fontsize=8, color=TEXT)
+        self.fig4.tight_layout(pad=1.1); self.canvas4.draw_idle()
+
     # ══════════════════════════════════════════════ export ═══════════════════
     def _save_csv(self):
         if not self.saved_data:
@@ -420,8 +578,10 @@ class Dashboard:
                 messagebox.showerror("Error", str(e))
 
     def on_close(self):
+        self._stop = True
         try:
-            self.client.loop_stop(); self.client.disconnect()
+            if not self.demo:
+                self.client.loop_stop(); self.client.disconnect()
         except Exception:
             pass
         self.root.quit(); self.root.destroy()
@@ -432,9 +592,11 @@ if __name__ == "__main__":
     p.add_argument("--broker", default=MQTT_BROKER)
     p.add_argument("--port", type=int, default=MQTT_PORT)
     p.add_argument("--topic", default=MQTT_TOPIC)
+    p.add_argument("--demo", action="store_true",
+                   help="Animate the dashboard from synthetic data (no broker needed)")
     args = p.parse_args()
 
     root = tk.Tk()
-    app = Dashboard(root, args.broker, args.port, args.topic)
+    app = Dashboard(root, args.broker, args.port, args.topic, demo=args.demo)
     root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()

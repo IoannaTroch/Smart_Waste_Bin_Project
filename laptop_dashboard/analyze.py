@@ -13,14 +13,24 @@ questions about the Smart Waste Bin:
     * latency_over_time.png        Is the pipeline getting slower?
     * events_per_bin.png           Are all bins used equally?
 
-Run:
-    python analyze.py                              # uses ../data/motion_events.jsonl
+DEMO / SMOKE-TEST MODE
+----------------------
+If no event log exists yet (or you pass --demo), analyze.py generates a
+realistic synthetic backup dataset so every chart can be produced for a
+showcase without needing a running pipeline:
+
+    python analyze.py --demo            # force synthetic data
+    python analyze.py --demo --days 21  # 3 weeks of synthetic data
+    python analyze.py                   # real log, or auto-fallback to demo
     python analyze.py path/to/events.jsonl
 """
 
+import argparse
 import json
 import os
+import random
 import sys
+from datetime import datetime, timedelta, timezone
 
 import matplotlib
 matplotlib.use("Agg")  # headless: write PNGs without a display
@@ -32,6 +42,81 @@ sns.set_theme(style="whitegrid", context="notebook", font_scale=1.05)
 
 CHARTS_DIR = os.getenv("CHARTS_DIR", "charts")
 os.makedirs(CHARTS_DIR, exist_ok=True)
+
+
+# ── Synthetic backup data (demo / smoke test) ─────────────────────────────────
+def generate_sample_events(path: str, days: int = 14, seed: int = 42) -> int:
+    """Write a realistic synthetic event log to `path` (JSONL, same shape the
+    MQTT consumer writes) so the charts can be showcased without a live system.
+
+    The pattern is deliberately readable: weekday lunch + commute peaks, quiet
+    weekends, two bins of differing popularity, and pipeline latency that mostly
+    sits low with occasional spikes.
+    """
+    rng = random.Random(seed)
+    bins = [
+        ("bin-01", "pir-01", "Lab Room 101 - Kitchen Corner", 1.0),
+        ("bin-02", "pir-02", "Lab Room 101 - Entrance", 0.55),
+    ]
+    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    start = now - timedelta(days=days)
+    seq = {b[0]: 0 for b in bins}
+    records = []
+
+    t = start
+    while t < now:
+        hour, dow = t.hour, t.weekday()  # dow: 0=Mon .. 6=Sun
+        if dow >= 5:                      # weekend
+            base = 1
+        elif 11 <= hour <= 14:            # lunch peak
+            base = 7
+        elif 8 <= hour <= 10:             # morning
+            base = 4
+        elif 15 <= hour <= 18:            # afternoon
+            base = 5
+        elif 19 <= hour <= 21:            # evening
+            base = 2
+        else:                             # night
+            base = 0
+
+        for bin_id, dev, locname, scale in bins:
+            lam = max(0.0, rng.gauss(base * scale, base * 0.35 + 0.4))
+            for _ in range(int(round(lam))):
+                ev_t = t + timedelta(minutes=rng.uniform(0, 59), seconds=rng.uniform(0, 59))
+                if ev_t >= now:
+                    continue
+                seq[bin_id] += 1
+                # latency mostly ~15-40ms, with rare spikes
+                latency_ms = rng.lognormvariate(3.1, 0.45)
+                if rng.random() < 0.04:
+                    latency_ms *= rng.uniform(3, 8)
+                recv_t = ev_t + timedelta(milliseconds=latency_ms)
+                iso = ev_t.isoformat().replace("+00:00", "Z")
+                records.append({
+                    "@context": "https://schema.org/",
+                    "@type": "Event",
+                    "name": "MotionDetected",
+                    "startDate": iso,
+                    "resultTime": iso,
+                    "madeBySensor": dev,
+                    "hasSimpleResult": "detected",
+                    "location": {"@type": "Place", "name": locname},
+                    "eventNumber": seq[bin_id],
+                    "bin_id": bin_id,
+                    "device_id": dev,
+                    "cpu_temp_c": round(rng.uniform(45, 61), 1),
+                    "gas_alert": "detected" if rng.random() < 0.02 else "clear",
+                    "_received_at": recv_t.isoformat().replace("+00:00", "Z"),
+                    "_topic": f"smartbin/{bin_id}/{dev}/events",
+                })
+        t += timedelta(hours=1)
+
+    records.sort(key=lambda r: r["startDate"])
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r) + "\n")
+    return len(records)
 
 
 # ── Data loading ──────────────────────────────────────────────────────────────
@@ -154,25 +239,35 @@ def plot_events_per_bin(df):
     counts = df.groupby("bin_id").size().reset_index(name="count")
     fig, ax = plt.subplots(figsize=(8, 5))
     sns.barplot(data=counts, x="bin_id", y="count",
-                palette=sns.color_palette("tab10", len(counts)), ax=ax, width=0.5)
+                palette=sns.color_palette("tab10", len(counts)), hue="bin_id",
+                legend=False, ax=ax, width=0.5)
     ax.set_xlabel("Bin ID"); ax.set_ylabel("Total Events")
     ax.set_title("Total Events per Bin", fontsize=14, fontweight="bold", pad=12)
     sns.despine(); _save("events_per_bin.png")
 
 
 def main() -> None:
-    if len(sys.argv) > 1:
-        filepath = sys.argv[1]
-    else:
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        filepath = os.path.join(root, "data", "motion_events.jsonl")
+    ap = argparse.ArgumentParser(description="Smart Waste Bin analytical charts")
+    ap.add_argument("path", nargs="?", default=None,
+                    help="Path to a JSONL event log (default: ../data/motion_events.jsonl)")
+    ap.add_argument("--demo", action="store_true",
+                    help="Generate synthetic backup data and chart it (no pipeline needed)")
+    ap.add_argument("--days", type=int, default=14,
+                    help="Days of synthetic data to generate in demo mode")
+    args = ap.parse_args()
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    filepath = args.path or os.path.join(root, "data", "motion_events.jsonl")
+
+    # Demo / smoke-test: forced, or auto-fallback when there is no real data.
+    if args.demo or not os.path.exists(filepath):
+        reason = "forced by --demo" if args.demo else f"no log at {filepath}"
+        backup = os.path.join(root, "data", "motion_events_sample.jsonl")
+        n = generate_sample_events(backup, days=args.days)
+        print(f"[demo] {reason}: generated {n} synthetic events -> {backup}")
+        filepath = backup
 
     print(f"Loading events from: {filepath}")
-    if not os.path.exists(filepath):
-        print("No event log found. Run the producer + consumer first "
-              "(or `docker compose up`) to generate data.")
-        sys.exit(1)
-
     df = load_events(filepath)
     print(f"Loaded {len(df)} events")
     if df.empty:

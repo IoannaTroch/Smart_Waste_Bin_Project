@@ -1,13 +1,17 @@
 # =============================================================================
 # Smart Waste Bin — full system orchestration (Cloud Edition)
 # -----------------------------------------------------------------------------
-# Backend uses the public HiveMQ broker (broker.hivemq.com:1883). The producer
-# reads the REAL PIR + MQ-3 over GPIO, so it runs on the Pi with privileged +
-# /dev. Everything is aligned to ONE identity: bin-01 / pir-01 (matches the
-# Home Assistant config, the JSON-LD models, and the virtual-sensor defaults).
+# The backend talks to the public HiveMQ broker (broker.hivemq.com:1883), so no
+# local broker is required.
 #
-# Node-RED is NOT a service here on purpose: you run it natively on the Pi
-# (http://<host>:1880) with your gas flow. Home Assistant UI: http://<host>:8123
+# The producer reads the REAL HC-SR501 PIR and MQ-3 gas sensor over GPIO, so
+# this stack is meant to run ON the Raspberry Pi: the producer service is given
+# hardware access via `privileged: true` and the `/dev:/dev` mount.
+#
+# Home Assistant is included as a service, so `docker compose up` starts it and
+# `docker compose down` stops it along with everything else. After the first
+# start, do the one-time MQTT integration setup in the HA UI (point it at
+# broker.hivemq.com:1883) — see README §7.
 # =============================================================================
 services:
 
@@ -24,15 +28,15 @@ services:
       - smartbin_data:/app/data
     restart: "no"
 
-  # Edge node — REAL PIR + MQ-3 over GPIO, publishing as bin-01 / pir-01.
+  # Edge node — real PIR + MQ-3 over GPIO, publishing as bin-01 / pir-01.
   producer:
     build:
       context: .
       dockerfile: pi_edge_node/Dockerfile
     container_name: smartbin-edge-node
-    privileged: true          # allows the container to read the physical GPIO pins
+    privileged: true
     volumes:
-      - /dev:/dev             # expose the GPIO device nodes
+      - /dev:/dev
     environment:
       PYTHONUNBUFFERED: "1"
       MQTT_BROKER: broker.hivemq.com
@@ -40,14 +44,8 @@ services:
       BIN_ID: bin-01
       DEVICE_ID: pir-01
       LOCATION: "Lab Room 101 - Kitchen Corner"
-    command:
-      [
-        "python", "pi_edge_node/pir_mqtt_producer.py",
-        "--broker", "broker.hivemq.com", "--port", "1883",
-        "--pin", "17", "--gas-pin", "23",
-        "--bin-id", "bin-01", "--device-id", "pir-01",
-        "--ha-discovery"
-      ]
+    # Removed the conflicting --bin-id and --device-id flags from the command!
+    command: ["python", "pi_edge_node/pir_mqtt_producer.py", "--broker", "broker.hivemq.com", "--pin", "17", "--gas-pin", "23", "--min-high", "0.4"]
     restart: unless-stopped
 
   consumer:
@@ -126,13 +124,15 @@ services:
       - smartbin_data:/app/data
     restart: unless-stopped
 
-  # Home Assistant — dashboard + MQTT entities. UI at http://<host>:8123
+  # Home Assistant — dashboard + MQTT entities. Starts with `up`, stops with `down`.
+  # host networking is recommended for HA on a Linux host (Raspberry Pi); it puts
+  # the UI on http://<host>:8123 and lets HA reach the broker directly.
   homeassistant:
     image: ghcr.io/home-assistant/home-assistant:stable
     container_name: homeassistant
     network_mode: host
     volumes:
-      - ./home_assistant:/config
+      - ./home_assistant:/config        # uses your configuration.yaml + dashboard.yaml
       - /etc/localtime:/etc/localtime:ro
     environment:
       TZ: Europe/Athens

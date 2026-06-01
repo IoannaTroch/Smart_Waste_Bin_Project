@@ -1,8 +1,8 @@
 # =============================================================================
 # Backend tier image (Milestones 4, 8, 9)
 # -----------------------------------------------------------------------------
-# One image, several roles. The same image runs the REST API, the MQTT
-# consumer, the rule-based virtual sensor and the ML virtual sensor — the
+# One image, several roles: the REST API, the MQTT consumer, the rule-based
+# virtual sensor, the ML virtual sensor, and the one-shot training job. The
 # command is chosen per-service in docker-compose.yml.
 # =============================================================================
 FROM python:3.12-slim
@@ -25,7 +25,7 @@ COPY models/ /app/models/
 ENV PROJECT_ROOT=/app \
     MODELS_DIR=/app/models \
     DATA_DIR=/app/data \
-    MQTT_BROKER=mosquitto \
+    MQTT_BROKER=broker.hivemq.com \
     API_PORT=5000
 
 # Shared data volume (motion_events.jsonl, trained model) lives here.
