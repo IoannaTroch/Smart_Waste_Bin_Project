@@ -13,7 +13,6 @@
 # start, do the one-time MQTT integration setup in the HA UI (point it at
 # broker.hivemq.com:1883) — see README §7.
 # =============================================================================
-
 services:
 
   train:
@@ -29,7 +28,6 @@ services:
       - smartbin_data:/app/data
     restart: "no"
 
-  # Edge node — real PIR + MQ-3 over GPIO, publishing as bin-01 / pir-01.
   # Edge node — real PIR + MQ-3 over GPIO, publishing as bin-01 / pir-01.
   producer:
     build:
