@@ -11,7 +11,7 @@
     "id": "broker_cfg",
     "type": "mqtt-broker",
     "name": "Broker",
-    "broker": "192.168.137.39",
+    "broker": "broker.hivemq.com",
     "port": "1883",
     "clientid": "node-red-smartbin-gas",
     "autoConnect": true,
