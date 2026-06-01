@@ -209,16 +209,7 @@ python laptop_dashboard/mqtt_gui_consumer.py --demo  # animates the live Tkinter
 
 ---
 
-## 10. Team (Group 10)
-
-| Name | Main Contributions |
-|---|---|
-| **Vasileios Banakos** | Everything |
-| **Charalampos Papadopoulos** | Everything |
-| **Ioanna Trochatou** | Everything |
-
----
-## 11. Generative AIs used
+## 10. Generative AIs used
 
 | **Claude AI** | 
 | **Perplexity AI** |
